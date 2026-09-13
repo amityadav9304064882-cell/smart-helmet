@@ -1,0 +1,2137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MineShield — Subterranean Safety Monitoring Platform</title>
+  <meta name="description" content="Every Worker. Every Helmet. Every Second. Industrial IoT & AI-driven subterranean safety command center." />
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            mine: {
+              950: '#07090e',
+              900: '#0d1117',
+              850: '#111620',
+              800: '#161b22',
+              750: '#1c232d',
+              700: '#21262d',
+              600: '#30363d',
+              500: '#484f58',
+              400: '#8b949e',
+              300: '#c9d1d9',
+              100: '#f0f6fc',
+            },
+            hazard: {
+              DEFAULT: '#f59e0b',
+              glow: '#fbbf24',
+              dark: '#d97706',
+              light: '#fef3c7'
+            }
+          },
+          fontFamily: {
+            mono: ['JetBrains Mono', 'Menlo', 'Consolas', 'monospace'],
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- React 18 & Babel Standalone CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0d1117; }
+    ::-webkit-scrollbar-thumb { background: #21262d; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #f59e0b; }
+
+    /* Page Slide In Transition */
+    @keyframes pageSlideIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .animate-page-slide {
+      animation: pageSlideIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* Danger Flashing */
+    @keyframes flashDangerRed {
+      0%, 100% { box-shadow: 0 0 0px 0px rgba(239, 68, 68, 0.4); border-color: rgba(239, 68, 68, 0.6); }
+      50% { box-shadow: 0 0 24px 6px rgba(239, 68, 68, 0.85); border-color: rgba(239, 68, 68, 1); }
+    }
+    .animate-flash-danger {
+      animation: flashDangerRed 1.2s infinite ease-in-out;
+    }
+
+    /* Profile Page Specific Animations */
+    @keyframes profileFadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .profile-section-anim {
+      animation: profileFadeUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    @keyframes helmetStatusPulse {
+      0%, 100% { transform: scale(1); filter: drop-shadow(0 0 0px var(--pulse-color, #10b981)); }
+      50% { transform: scale(1.03); filter: drop-shadow(0 0 14px var(--pulse-color, #10b981)); }
+    }
+    .profile-helmet-pulse {
+      animation: helmetStatusPulse 2.8s ease-in-out infinite;
+    }
+
+    /* Respect prefers-reduced-motion */
+    @media (prefers-reduced-motion: reduce) {
+      .animate-page-slide,
+      .animate-flash-danger,
+      .profile-section-anim,
+      .profile-helmet-pulse {
+        animation: none !important;
+        transition: none !important;
+        transform: none !important;
+        opacity: 1 !important;
+      }
+    }
+
+    @media print {
+      body { background: #fff !important; color: #000 !important; }
+      header, aside, .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="bg-mine-950 text-mine-100 font-mono antialiased selection:bg-hazard selection:text-mine-950 overflow-x-hidden">
+  <div style="position:fixed;z-index:9999;top:0;left:50%;transform:translateX(-50%);background:#7f1d1d;color:#fecaca;padding:5px 14px;font:700 10px monospace;letter-spacing:.08em;border:1px solid #ef4444;border-top:0;border-radius:0 0 8px 8px;">DEMO / SIMULATED SENSOR DATA — HARDWARE NOT CONNECTED</div>
+  <div id="root"></div>
+
+  <!-- React Application Logic -->
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    // --- 1. SVG HELMET ICON HELPER (NO FACE PHOTOS) ---
+    function HelmetIcon({ size = 20, color = 'currentColor', className = '' }) {
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+          <path d="M2 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-2a8 8 0 0 0-16 0v2z" fill={color} fillOpacity="0.18" />
+          <path d="M10 10V5a2 2 0 0 1 4 0v5" />
+          <path d="M4 15h16" />
+          <circle cx="12" cy="4" r="1.5" fill={color} />
+        </svg>
+      );
+    }
+
+    // --- 2. INITIAL 30 WORKERS DATASET & BLOCKS ---
+    const INITIAL_WORKERS = [
+      // BLOCK A (NORMAL NOMINAL)
+      { workerId: 'WRK-A-001', helmetId: 'HLM-A-001', name: 'Rameshwar Mahato', block: 'A', zone: 'Zone A-01 (Incline 1 Portal)', homePhone: '+91 94311 02801', emergencyContact: '+91 98350 44112 (Brother)', bloodGroup: 'O+', designation: 'Haulage Operator', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:05 AM', medicalNotes: 'No chronic issues. Annual DGMS fitness certified.', history: ['Routine belt inspection', 'DGMS training completed'], telemetry: { online: true, battery: 94, mq2_methane_ppm: 22, mq7_co_ppm: 6, oxygen_pct: 20.8, temp_c: 24.2, humidity_pct: 62, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -58, lastMotionTimestamp: Date.now() - 12000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-A-002', helmetId: 'HLM-A-002', name: 'Subhash Chandra Bauri', block: 'A', zone: 'Zone A-02 (Junction 4 Gallery)', homePhone: '+91 94311 02802', emergencyContact: '+91 97710 33221 (Wife)', bloodGroup: 'B+', designation: 'Timber Setter / Roof Bolter', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:12 AM', medicalNotes: 'Mild knee wear.', history: ['Roof bolt torque test OK'], telemetry: { online: true, battery: 89, mq2_methane_ppm: 28, mq7_co_ppm: 8, oxygen_pct: 20.7, temp_c: 24.8, humidity_pct: 64, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -64, lastMotionTimestamp: Date.now() - 5000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-A-003', helmetId: 'HLM-A-003', name: 'Alok Ranjan Hembram', block: 'A', zone: 'Zone A-03 (Loading Point 2)', homePhone: '+91 94311 02803', emergencyContact: '+91 94315 22001 (Father)', bloodGroup: 'A+', designation: 'Conveyor Attendant', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:02 AM', medicalNotes: 'Normal.', history: ['Belt tension adjusted'], telemetry: { online: true, battery: 92, mq2_methane_ppm: 19, mq7_co_ppm: 5, oxygen_pct: 20.9, temp_c: 23.9, humidity_pct: 61, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -55, lastMotionTimestamp: Date.now() - 8000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-A-004', helmetId: 'HLM-A-004', name: 'Pradeep Kumar Gope', block: 'A', zone: 'Zone A-04 (Return Drift Split)', homePhone: '+91 94311 02804', emergencyContact: '+91 99312 88440 (Wife)', bloodGroup: 'AB+', designation: 'Ventilation Stopper', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:15 AM', medicalNotes: 'Normal.', history: ['Airflow partition inspected'], telemetry: { online: true, battery: 86, mq2_methane_ppm: 31, mq7_co_ppm: 7, oxygen_pct: 20.6, temp_c: 25.1, humidity_pct: 65, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -62, lastMotionTimestamp: Date.now() - 20000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-A-005', helmetId: 'HLM-A-005', name: 'Birendra Hansda', block: 'A', zone: 'Zone A-05 (Substation 1 Chamber)', homePhone: '+91 94311 02805', emergencyContact: '+91 96540 12399 (Son)', bloodGroup: 'O+', designation: 'Flameproof Electrician', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:08 AM', medicalNotes: 'Fit.', history: ['FLP gate end box earth test'], telemetry: { online: true, battery: 97, mq2_methane_ppm: 18, mq7_co_ppm: 4, oxygen_pct: 20.9, temp_c: 23.5, humidity_pct: 59, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -52, lastMotionTimestamp: Date.now() - 3000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-A-006', helmetId: 'HLM-A-006', name: 'Santosh Karmakar', block: 'A', zone: 'Zone A-06 (Shaft Inset 1)', homePhone: '+91 94311 02806', emergencyContact: '+91 91234 56780 (Wife)', bloodGroup: 'B-', designation: 'Onsetters Assistant', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:20 AM', medicalNotes: 'Normal.', history: ['Cage signaling check'], telemetry: { online: true, battery: 83, mq2_methane_ppm: 24, mq7_co_ppm: 5, oxygen_pct: 20.8, temp_c: 24.0, humidity_pct: 60, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -50, lastMotionTimestamp: Date.now() - 14000, rescueStatus: 'NONE' } },
+
+      // BLOCK B (METHANE LEAK DISASTER - WRK-B-004 SCORE 12%)
+      { workerId: 'WRK-B-001', helmetId: 'HLM-B-001', name: 'Dhiren Chandra Mandal', block: 'B', zone: 'Zone B-01 (Intake Air Split B)', homePhone: '+91 94311 02807', emergencyContact: '+91 94301 22889 (Wife)', bloodGroup: 'A+', designation: 'Overman / Section Incharge', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '05:50 AM', medicalNotes: 'Normal.', history: ['Pre-shift gas survey logged'], telemetry: { online: true, battery: 88, mq2_methane_ppm: 110, mq7_co_ppm: 18, oxygen_pct: 19.8, temp_c: 27.2, humidity_pct: 78, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -66, lastMotionTimestamp: Date.now() - 6000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-B-002', helmetId: 'HLM-B-002', name: 'Pankaj Kumar Tudu', block: 'B', zone: 'Zone B-02 (Longwall Face 4)', homePhone: '+91 94311 02808', emergencyContact: '+91 98351 99002 (Brother)', bloodGroup: 'O+', designation: 'Shearer Driver', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:00 AM', medicalNotes: 'Normal.', history: ['Cutting drum picks replaced'], telemetry: { online: true, battery: 82, mq2_methane_ppm: 260, mq7_co_ppm: 24, oxygen_pct: 19.1, temp_c: 29.5, humidity_pct: 82, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -71, lastMotionTimestamp: Date.now() - 15000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-B-003', helmetId: 'HLM-B-003', name: 'Manish Kumar Roy', block: 'B', zone: 'Zone B-03 (AFC Drive Head)', homePhone: '+91 94311 02809', emergencyContact: '+91 94711 77334 (Wife)', bloodGroup: 'B+', designation: 'Chock Shield Operator', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:05 AM', medicalNotes: 'Normal.', history: ['Shield canopy pressure 380 bar'], telemetry: { online: true, battery: 79, mq2_methane_ppm: 340, mq7_co_ppm: 32, oxygen_pct: 18.8, temp_c: 30.1, humidity_pct: 85, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -74, lastMotionTimestamp: Date.now() - 9000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-B-004', helmetId: 'HLM-B-004', name: 'Ganesh Murmu', block: 'B', zone: 'Zone B-04 (Tailgate Return Cavity)', homePhone: '+91 94311 02810', emergencyContact: '+91 96541 44332 (Wife)', bloodGroup: 'AB-', designation: 'Return Airway Examiner', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:10 AM', medicalNotes: 'Normal.', history: ['URGENT: Methane surge 890 ppm detected', 'Evacuation alarm triggered'], telemetry: { online: true, battery: 74, mq2_methane_ppm: 890, mq7_co_ppm: 64, oxygen_pct: 17.2, temp_c: 33.4, humidity_pct: 89, motionState: 'SLOW', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -82, lastMotionTimestamp: Date.now() - 40000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-B-005', helmetId: 'HLM-B-005', name: 'Bijoy Krishna Das', block: 'B', zone: 'Zone B-05 (Maingate Transfer 3)', homePhone: '+91 94311 02811', emergencyContact: '+91 91234 11229 (Son)', bloodGroup: 'O-', designation: 'Stage Loader Operator', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:04 AM', medicalNotes: 'Fit.', history: ['Crusher clear'], telemetry: { online: true, battery: 90, mq2_methane_ppm: 140, mq7_co_ppm: 19, oxygen_pct: 19.6, temp_c: 28.0, humidity_pct: 80, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -65, lastMotionTimestamp: Date.now() - 4000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-B-006', helmetId: 'HLM-B-006', name: 'Md. Aslam Ansari', block: 'B', zone: 'Zone B-06 (Auxiliary Blower Duct)', homePhone: '+91 94311 02812', emergencyContact: '+91 97711 66554 (Brother)', bloodGroup: 'A-', designation: 'Ventilation Duct Erector', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:14 AM', medicalNotes: 'Normal.', history: ['Canvas duct extension completed'], telemetry: { online: true, battery: 85, mq2_methane_ppm: 195, mq7_co_ppm: 22, oxygen_pct: 19.4, temp_c: 28.8, humidity_pct: 81, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -69, lastMotionTimestamp: Date.now() - 11000, rescueStatus: 'NONE' } },
+
+      // BLOCK C (FLOOD / WATER INGRESS - WRK-C-003 SCORE 18%)
+      { workerId: 'WRK-C-001', helmetId: 'HLM-C-001', name: 'Chitta Ranjan Kisku', block: 'C', zone: 'Zone C-01 (Sump Level 1 Access)', homePhone: '+91 94311 02813', emergencyContact: '+91 94313 77881 (Wife)', bloodGroup: 'B+', designation: 'Turbine Pump Attendant', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:00 AM', medicalNotes: 'Normal.', history: ['High head pump priming test'], telemetry: { online: true, battery: 81, mq2_methane_ppm: 42, mq7_co_ppm: 8, oxygen_pct: 20.3, temp_c: 26.1, humidity_pct: 88, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: true, signal_rssi: -68, lastMotionTimestamp: Date.now() - 10000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-C-002', helmetId: 'HLM-C-002', name: 'Sunil Kumar Soren', block: 'C', zone: 'Zone C-02 (Central Dewatering Station)', homePhone: '+91 94311 02814', emergencyContact: '+91 98352 11440 (Brother)', bloodGroup: 'O+', designation: 'Mechanical Fitter (Pumps)', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:07 AM', medicalNotes: 'Fit.', history: ['Suction valve pack replacement'], telemetry: { online: true, battery: 88, mq2_methane_ppm: 38, mq7_co_ppm: 7, oxygen_pct: 20.4, temp_c: 25.8, humidity_pct: 89, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: true, signal_rssi: -65, lastMotionTimestamp: Date.now() - 7000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-C-003', helmetId: 'HLM-C-003', name: 'Lakhpatia Mian', block: 'C', zone: 'Zone C-03 (Dip Heading Sump Floor)', homePhone: '+91 94311 02815', emergencyContact: '+91 99313 55667 (Wife)', bloodGroup: 'AB+', designation: 'Deep Sump Drainman', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:12 AM', medicalNotes: 'Normal.', history: ['WATER SURGE WARNING: Water sensor active', 'Water level rise 1.8m in 20 min'], telemetry: { online: true, battery: 73, mq2_methane_ppm: 55, mq7_co_ppm: 10, oxygen_pct: 19.7, temp_c: 23.2, humidity_pct: 99, motionState: 'SLOW', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: true, signal_rssi: -79, lastMotionTimestamp: Date.now() - 32000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-C-004', helmetId: 'HLM-C-004', name: 'Doman Mahto', block: 'C', zone: 'Zone C-04 (Rising Main Drift)', homePhone: '+91 94311 02816', emergencyContact: '+91 96542 66778 (Son)', bloodGroup: 'A+', designation: 'Pipe Joint Inspector', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:18 AM', medicalNotes: 'Normal.', history: ['Flange torque check 150mm main'], telemetry: { online: true, battery: 91, mq2_methane_ppm: 32, mq7_co_ppm: 6, oxygen_pct: 20.6, temp_c: 25.2, humidity_pct: 82, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -60, lastMotionTimestamp: Date.now() - 13000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-C-005', helmetId: 'HLM-C-005', name: 'Nabin Kumar Gope', block: 'C', zone: 'Zone C-05 (Mud Dam Wall 2)', homePhone: '+91 94311 02817', emergencyContact: '+91 94302 44556 (Brother)', bloodGroup: 'O-', designation: 'Water Dam Mason', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:03 AM', medicalNotes: 'Fit.', history: ['Brick masonry seal plastering'], telemetry: { online: true, battery: 86, mq2_methane_ppm: 35, mq7_co_ppm: 7, oxygen_pct: 20.5, temp_c: 25.5, humidity_pct: 86, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: true, signal_rssi: -64, lastMotionTimestamp: Date.now() - 17000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-C-006', helmetId: 'HLM-C-006', name: 'Tapan Kumar Roy', block: 'C', zone: 'Zone C-06 (Inundation Barrier Crosscut)', homePhone: '+91 94311 02818', emergencyContact: '+91 91234 99001 (Wife)', bloodGroup: 'B-', designation: 'Geological Slime Surveyor', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:25 AM', medicalNotes: 'Normal.', history: ['Permeability test logged'], telemetry: { online: true, battery: 89, mq2_methane_ppm: 40, mq7_co_ppm: 8, oxygen_pct: 20.4, temp_c: 26.0, humidity_pct: 87, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -62, lastMotionTimestamp: Date.now() - 5000, rescueStatus: 'NONE' } },
+
+      // BLOCK D (WORKER FALL & SOS TRIGGERED - WRK-D-004 SCORE 8%)
+      { workerId: 'WRK-D-001', helmetId: 'HLM-D-001', name: 'Manoj Kumar Marandi', block: 'D', zone: 'Zone D-01 (Depillaring Panel D1)', homePhone: '+91 94311 02819', emergencyContact: '+91 98353 22331 (Wife)', bloodGroup: 'A+', designation: 'Mining Sirdar (Panel D)', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '05:45 AM', medicalNotes: 'Normal.', history: ['Tell-tale roof displacement checked'], telemetry: { online: true, battery: 93, mq2_methane_ppm: 30, mq7_co_ppm: 8, oxygen_pct: 20.7, temp_c: 26.2, humidity_pct: 69, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -59, lastMotionTimestamp: Date.now() - 9000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-D-002', helmetId: 'HLM-D-002', name: 'Haradhan Murmu', block: 'D', zone: 'Zone D-02 (Goaf Edge Breaker Line)', homePhone: '+91 94311 02820', emergencyContact: '+91 97712 55443 (Brother)', bloodGroup: 'O+', designation: 'Hydraulic Prop Setter', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:05 AM', medicalNotes: 'Normal.', history: ['Breaker prop setting load 20T'], telemetry: { online: true, battery: 85, mq2_methane_ppm: 44, mq7_co_ppm: 10, oxygen_pct: 20.4, temp_c: 27.1, humidity_pct: 71, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -67, lastMotionTimestamp: Date.now() - 12000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-D-003', helmetId: 'HLM-D-003', name: 'Rabin Baskey', block: 'D', zone: 'Zone D-03 (Pillar Splitting Slice 3)', homePhone: '+91 94311 02821', emergencyContact: '+91 94712 88990 (Father)', bloodGroup: 'B+', designation: 'Continuous Miner Assistant', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:12 AM', medicalNotes: 'Fit.', history: ['Rib extraction safety check'], telemetry: { online: true, battery: 88, mq2_methane_ppm: 39, mq7_co_ppm: 9, oxygen_pct: 20.5, temp_c: 26.8, humidity_pct: 70, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -63, lastMotionTimestamp: Date.now() - 8000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-D-004', helmetId: 'HLM-D-004', name: 'Somra Oraon', block: 'D', zone: 'Zone D-04 (Chute Discharge Stope)', homePhone: '+91 94311 02822', emergencyContact: '+91 91234 44332 (Wife)', bloodGroup: 'O-', designation: 'Chute Loader', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:08 AM', medicalNotes: 'Blood group verified. No cardiac history.', history: ['DISTRESS: High Impact Fall from Chute Platform', 'HELMET SOS BUTTON PRESSED', 'Vitals: Tachycardia 124 BPM'], telemetry: { online: true, battery: 71, mq2_methane_ppm: 48, mq7_co_ppm: 11, oxygen_pct: 20.2, temp_c: 27.8, humidity_pct: 73, motionState: 'IMMOBILE', fallDetected: true, impactDetected: true, sosPressed: true, waterDetected: false, signal_rssi: -78, lastMotionTimestamp: Date.now() - 190000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-D-005', helmetId: 'HLM-D-005', name: 'Kameshwar Yadav', block: 'D', zone: 'Zone D-05 (Shuttle Car Turnout)', homePhone: '+91 94311 02823', emergencyContact: '+91 99314 11223 (Son)', bloodGroup: 'A-', designation: 'Shuttle Car Driver', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:15 AM', medicalNotes: 'Fit.', history: ['Trailing cable anchor inspected'], telemetry: { online: true, battery: 92, mq2_methane_ppm: 34, mq7_co_ppm: 8, oxygen_pct: 20.6, temp_c: 26.3, humidity_pct: 68, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -61, lastMotionTimestamp: Date.now() - 6000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-D-006', helmetId: 'HLM-D-006', name: 'Satyendra Nath Ghosh', block: 'D', zone: 'Zone D-06 (Return Airway Stopping 9)', homePhone: '+91 94311 02824', emergencyContact: '+91 94315 67890 (Wife)', bloodGroup: 'B+', designation: 'Stopping Builder', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:10 AM', medicalNotes: 'Normal.', history: ['Stopping seal verified'], telemetry: { online: true, battery: 87, mq2_methane_ppm: 36, mq7_co_ppm: 9, oxygen_pct: 20.5, temp_c: 26.6, humidity_pct: 67, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -65, lastMotionTimestamp: Date.now() - 21000, rescueStatus: 'NONE' } },
+
+      // BLOCK E (WORKER TRAPPED / NO-MOTION - WRK-E-005 SCORE 20%)
+      { workerId: 'WRK-E-001', helmetId: 'HLM-E-001', name: 'Arjun Munda', block: 'E', zone: 'Zone E-01 (Fan Evasee Transition)', homePhone: '+91 94311 02825', emergencyContact: '+91 98350 11223 (Wife)', bloodGroup: 'O+', designation: 'Main Fan Drift Engineer', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:00 AM', medicalNotes: 'Normal.', history: ['Fan drift pressure 120 mm wg'], telemetry: { online: true, battery: 86, mq2_methane_ppm: 55, mq7_co_ppm: 12, oxygen_pct: 20.3, temp_c: 28.1, humidity_pct: 74, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -61, lastMotionTimestamp: Date.now() - 16000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-E-002', helmetId: 'HLM-E-002', name: 'Kallu Ram', block: 'E', zone: 'Zone E-02 (Air Lock Chamber 1)', homePhone: '+91 94311 02826', emergencyContact: '+91 99311 44556 (Brother)', bloodGroup: 'B+', designation: 'Air Lock Door Operator', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:08 AM', medicalNotes: 'Fit.', history: ['Interlock doors tested'], telemetry: { online: true, battery: 91, mq2_methane_ppm: 52, mq7_co_ppm: 11, oxygen_pct: 20.4, temp_c: 27.7, humidity_pct: 71, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -58, lastMotionTimestamp: Date.now() - 11000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-E-003', helmetId: 'HLM-E-003', name: 'Bishnu Pada Karmakar', block: 'E', zone: 'Zone E-03 (Explosion Barrier Drift 3)', homePhone: '+91 94311 02827', emergencyContact: '+91 97710 33445 (Wife)', bloodGroup: 'A+', designation: 'Stone Dust Barrier Inspector', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:15 AM', medicalNotes: 'Normal.', history: ['Stone dust moisture < 3%'], telemetry: { online: true, battery: 83, mq2_methane_ppm: 58, mq7_co_ppm: 14, oxygen_pct: 20.2, temp_c: 28.4, humidity_pct: 73, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -65, lastMotionTimestamp: Date.now() - 22000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-E-004', helmetId: 'HLM-E-004', name: 'Jagdish Chandra Mahato', block: 'E', zone: 'Zone E-04 (Exhaust Collector Header)', homePhone: '+91 94311 02828', emergencyContact: '+91 96540 88990 (Father)', bloodGroup: 'AB+', designation: 'Methane Drainage Fitter', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:22 AM', medicalNotes: 'Fit.', history: ['HDPE pipe fusion tested'], telemetry: { online: true, battery: 89, mq2_methane_ppm: 62, mq7_co_ppm: 13, oxygen_pct: 20.3, temp_c: 28.0, humidity_pct: 72, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -64, lastMotionTimestamp: Date.now() - 17000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-E-005', helmetId: 'HLM-E-005', name: 'Anil Soren', block: 'E', zone: 'Zone E-05 (Deep Incline Sub-Level Drift)', homePhone: '+91 94311 02829', emergencyContact: '+91 91234 88776 (Brother)', bloodGroup: 'O-', designation: 'Scraper Attendant', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:05 AM', medicalNotes: 'Normal.', history: ['CRITICAL: Zero movement detected for > 3 minutes', 'POTENTIAL COAL FALL ENTRAPMENT'], telemetry: { online: true, battery: 77, mq2_methane_ppm: 68, mq7_co_ppm: 15, oxygen_pct: 20.1, temp_c: 28.8, humidity_pct: 75, motionState: 'IMMOBILE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -73, lastMotionTimestamp: Date.now() - 260000, rescueStatus: 'NONE' } },
+      { workerId: 'WRK-E-006', helmetId: 'HLM-E-006', name: 'Suresh Kumar Das', block: 'E', zone: 'Zone E-06 (Direct Haulage Winch Drift)', homePhone: '+91 94311 02830', emergencyContact: '+91 94301 22334 (Wife)', bloodGroup: 'B+', designation: 'Winch Operator', shift: 'Morning (06:00 - 14:00)', isInsideMine: true, entryTime: '06:12 AM', medicalNotes: 'Fit.', history: ['Winch emergency brake tested'], telemetry: { online: true, battery: 84, mq2_methane_ppm: 54, mq7_co_ppm: 12, oxygen_pct: 20.4, temp_c: 27.5, humidity_pct: 70, motionState: 'ACTIVE', fallDetected: false, impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -62, lastMotionTimestamp: Date.now() - 14000, rescueStatus: 'NONE' } }
+    ];
+
+    const MINE_BLOCKS = {
+      A: { id: 'A', name: 'Block A - North Extraction Drift', depth: '180m', exit: 'Shaft 1 North Headframe (140m)', issue: 'Normal operations nominal', hazard: 'Strata Roof Pressure', color: '#10b981' },
+      B: { id: 'B', name: 'Block B - East Longwall Face', depth: '260m', exit: 'Shaft 2 East Emergency Cage (210m)', issue: 'Block B: Critical methane leakage', hazard: 'Methane (CH4) Outburst & Gas Pockets', color: '#ef4444' },
+      C: { id: 'C', name: 'Block C - Central Deep Sump', depth: '340m', exit: 'Shaft 3 Deep Escape Capsule (190m)', issue: 'Block C: Flood/water ingress', hazard: 'Water Ingress / Inundation', color: '#06b6d4' },
+      D: { id: 'D', name: 'Block D - South Extraction & Depillaring', depth: '290m', exit: 'Shaft 4 South Auxiliary Escape (165m)', issue: 'Block D: Worker fall and SOS', hazard: 'Worker Fall & Manual Emergency Distress', color: '#f97316' },
+      E: { id: 'E', name: 'Block E - Ventilation Return Corridor', depth: '210m', exit: 'Exhaust Fan Drift Egress Gate (120m)', issue: 'Block E: Worker no-motion / trapped risk', hazard: 'Entrapment / No Movement In Sub-level', color: '#eab308' }
+    };
+
+    // --- 3. SAFETY SCORING HELPER ---
+    function calcSafetyScore(w) {
+      const t = w.telemetry || {};
+      if (t.sosPressed) {
+        return { score: 8, tier: 'CRITICAL', color: '#ef4444', text: 'NOT SAFE (SOS PRESSED)' };
+      }
+      let score = 100;
+      if (!t.online) score -= 45;
+      if (t.fallDetected) score -= 55;
+      if (t.motionState === 'IMMOBILE') score -= 60;
+      if (t.waterDetected) score -= 50;
+      if (t.mq2_methane_ppm > 350) score -= 65;
+      else if (t.mq2_methane_ppm > 150) score -= 35;
+      else if (t.mq2_methane_ppm > 70) score -= 15;
+      if (t.mq7_co_ppm > 30) score -= 25;
+      if (t.oxygen_pct < 19.5) score -= 20;
+
+      score = Math.max(5, Math.min(100, score));
+
+      if (score >= 80) return { score, tier: 'SAFE', color: '#10b981', text: 'SAFE' };
+      if (score >= 60) return { score, tier: 'CAUTION', color: '#eab308', text: 'CAUTION' };
+      if (score >= 40) return { score, tier: 'HIGH RISK', color: '#f97316', text: 'HIGH RISK' };
+      return { score, tier: 'CRITICAL', color: '#ef4444', text: 'NOT SAFE / CRITICAL' };
+    }
+
+    function getHelmetColor(w) {
+      const t = w.telemetry || {};
+      if (!t.online) return { fill: '#6b7280', label: 'Offline' };
+      if (t.rescueStatus && t.rescueStatus !== 'NONE') return { fill: '#3b82f6', label: 'Rescue Team Assigned' };
+      const s = calcSafetyScore(w);
+      return { fill: s.color, label: s.text };
+    }
+
+    // --- 4. MAIN SINGLE-PAGE APPLICATION COMPONENT ---
+    function MineShieldApp() {
+      // Authentication & Routing State
+      const [isAuthenticated, setIsAuthenticated] = useState(false);
+      const [currentRoute, setCurrentRoute] = useState('#/login');
+      const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+      // Core State
+      const [workers, setWorkers] = useState(INITIAL_WORKERS);
+      const [evacuationActive, setEvacuationActive] = useState(false);
+      const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
+
+      // Interactive Alerts State
+      const [alerts, setAlerts] = useState([
+        { id: 'ALT-101', workerId: 'WRK-B-004', block: 'B', type: 'CRITICAL GAS OUTBURST', title: 'Methane (CH4) Exceeded 890 ppm', severity: 'CRITICAL', time: '10:42 AM', acknowledged: false, hapticSent: false, teamDispatched: false, fansMax: false, status: 'OPEN' },
+        { id: 'ALT-102', workerId: 'WRK-D-004', block: 'D', type: 'EMERGENCY DISTRESS (SOS)', title: 'Worker Fall & Manual SOS Key Pressed', severity: 'CRITICAL', time: '10:43 AM', acknowledged: false, hapticSent: false, teamDispatched: false, fansMax: false, status: 'OPEN' },
+        { id: 'ALT-103', workerId: 'WRK-C-003', block: 'C', type: 'WATER INUNDATION', title: 'Sump Submersion Sensor Active', severity: 'CRITICAL', time: '10:44 AM', acknowledged: false, hapticSent: false, teamDispatched: false, fansMax: false, status: 'OPEN' },
+        { id: 'ALT-104', workerId: 'WRK-E-005', block: 'E', type: 'NO MOTION DETECTED', title: 'Potential Entrapment / Zero Movement > 3 min', severity: 'WARNING', time: '10:45 AM', acknowledged: false, hapticSent: false, teamDispatched: false, fansMax: false, status: 'OPEN' },
+        { id: 'ALT-105', workerId: 'WRK-A-004', block: 'A', type: 'VENTILATION DRIFT', title: 'Air Velocity Fluctuation 1.1 m/s', severity: 'INFO', time: '10:40 AM', acknowledged: true, hapticSent: false, teamDispatched: false, fansMax: false, status: 'OPEN' },
+      ]);
+
+      // Modals
+      const [confirmationModal, setConfirmationModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+
+      // Search & Filters
+      const [workerSearch, setWorkerSearch] = useState('');
+      const [selectedBlockFilter, setSelectedBlockFilter] = useState('ALL');
+
+      // Login Form Inputs
+      const [loginUser, setLoginUser] = useState('');
+      const [loginPass, setLoginPass] = useState('');
+      const [loginError, setLoginError] = useState('');
+
+      // New Worker Entry State
+      const [newWorker, setNewWorker] = useState({
+        workerId: '', helmetId: '', name: '', block: 'A', zone: 'Zone A-01 (Incline 1 Portal)', homePhone: '', emergencyContact: '', bloodGroup: 'O+', designation: 'General Miner', shift: 'Morning (06:00 - 14:00)', medicalNotes: ''
+      });
+      const [entryError, setEntryError] = useState('');
+      const [entrySuccess, setEntrySuccess] = useState('');
+
+      // Sync Hash Navigation
+      useEffect(() => {
+        const handleHashChange = () => {
+          const hash = window.location.hash || '#/login';
+          setCurrentRoute(hash);
+        };
+        window.addEventListener('hashchange', handleHashChange);
+        if (window.location.hash) {
+          setCurrentRoute(window.location.hash);
+        } else {
+          window.location.hash = '#/login';
+        }
+        return () => window.removeEventListener('hashchange', handleHashChange);
+      }, []);
+
+      // Realtime Clock
+      useEffect(() => {
+        const timer = setInterval(() => {
+          setCurrentTime(new Date().toLocaleTimeString());
+        }, 1000);
+        return () => clearInterval(timer);
+      }, []);
+
+      // Navigation Function
+      const navigateTo = (hash) => {
+        window.location.hash = hash;
+        setIsMobileMenuOpen(false);
+      };
+
+      // Route Parsing
+      const routeInfo = useMemo(() => {
+        const parts = currentRoute.replace('#/', '').split('/');
+        return {
+          base: parts[0] || 'login',
+          param: parts[1] || null
+        };
+      }, [currentRoute]);
+
+      // Metrics calculation
+      const metrics = useMemo(() => {
+        let insideCount = workers.filter(w => w.isInsideMine).length;
+        let criticalCount = workers.filter(w => calcSafetyScore(w).tier === 'CRITICAL').length;
+        let cautionCount = workers.filter(w => calcSafetyScore(w).tier === 'CAUTION' || calcSafetyScore(w).tier === 'HIGH RISK').length;
+        let safeCount = workers.filter(w => calcSafetyScore(w).tier === 'SAFE').length;
+        let unackAlerts = alerts.filter(a => !a.acknowledged).length;
+        return { insideCount, criticalCount, cautionCount, safeCount, unackAlerts };
+      }, [workers, alerts]);
+
+      // Handle Login
+      const handleLoginSubmit = (e) => {
+        e.preventDefault();
+        if (loginUser.trim() === 'control.room' && loginPass === 'mine') {
+          setIsAuthenticated(true);
+          setLoginError('');
+          navigateTo('#/home');
+        } else {
+          setLoginError('Invalid Operator ID or Password. (Use "control.room" and "mine")');
+        }
+      };
+
+      // Handle New Worker Creation
+      const handleNewWorkerSubmit = (e) => {
+        e.preventDefault();
+        setEntryError('');
+        setEntrySuccess('');
+
+        if (!newWorker.workerId.trim() || !newWorker.helmetId.trim() || !newWorker.name.trim()) {
+          setEntryError('Worker ID, Helmet ID, and Full Name are mandatory.');
+          return;
+        }
+
+        // Check Duplicates
+        if (workers.some(w => w.workerId.toUpperCase() === newWorker.workerId.toUpperCase())) {
+          setEntryError(`Duplicate Worker ID! "${newWorker.workerId}" is already registered.`);
+          return;
+        }
+
+        const created = {
+          ...newWorker,
+          workerId: newWorker.workerId.toUpperCase(),
+          helmetId: newWorker.helmetId.toUpperCase(),
+          isInsideMine: true,
+          entryTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          history: ['Newly inducted on subterranean shift'],
+          telemetry: {
+            online: true, battery: 100, mq2_methane_ppm: 20, mq7_co_ppm: 5, oxygen_pct: 20.9,
+            temp_c: 24.5, humidity_pct: 60, motionState: 'ACTIVE', fallDetected: false,
+            impactDetected: false, sosPressed: false, waterDetected: false, signal_rssi: -54,
+            lastMotionTimestamp: Date.now(), rescueStatus: 'NONE'
+          }
+        };
+
+        setWorkers([created, ...workers]);
+        setEntrySuccess(`Worker ${created.workerId} (${created.name}) successfully inducted into Block ${created.block}!`);
+        setNewWorker({
+          workerId: '', helmetId: '', name: '', block: 'A', zone: 'Zone A-01 (Incline 1 Portal)',
+          homePhone: '', emergencyContact: '', bloodGroup: 'O+', designation: 'General Miner',
+          shift: 'Morning (06:00 - 14:00)', medicalNotes: ''
+        });
+      };
+
+      // Filtered workers list
+      const filteredWorkers = useMemo(() => {
+        return workers.filter(w => {
+          const matchBlock = selectedBlockFilter === 'ALL' || w.block === selectedBlockFilter;
+          const q = workerSearch.toLowerCase();
+          const matchQuery = !q ||
+            w.name.toLowerCase().includes(q) ||
+            w.workerId.toLowerCase().includes(q) ||
+            w.helmetId.toLowerCase().includes(q) ||
+            w.designation.toLowerCase().includes(q) ||
+            w.bloodGroup.toLowerCase().includes(q) ||
+            w.zone.toLowerCase().includes(q);
+          return matchBlock && matchQuery;
+        });
+      }, [workers, selectedBlockFilter, workerSearch]);
+
+      // Selected single worker for worker-details
+      const currentWorker = useMemo(() => {
+        if (routeInfo.base !== 'worker-details' || !routeInfo.param) return null;
+        return workers.find(w => w.workerId === routeInfo.param) || workers[0];
+      }, [workers, routeInfo]);
+
+      // Selected single block for block-details
+      const currentBlockData = useMemo(() => {
+        const bId = (routeInfo.base === 'block-details' && routeInfo.param) ? routeInfo.param.toUpperCase() : 'A';
+        return MINE_BLOCKS[bId] || MINE_BLOCKS['A'];
+      }, [routeInfo]);
+
+      // Selected single alert for alert-details
+      const currentAlert = useMemo(() => {
+        if (routeInfo.base !== 'alert-details' || !routeInfo.param) return null;
+        return alerts.find(a => a.id === routeInfo.param) || alerts[0];
+      }, [alerts, routeInfo]);
+
+      // Menu Routes configuration
+      const NAV_ITEMS = [
+        { route: '#/home', label: 'Home Dashboard', icon: '🏠', base: 'home' },
+        { route: '#/mine-overview', label: 'Mine Overview Map', icon: '🗺️', base: 'mine-overview' },
+        { route: '#/block-details/B', label: 'Block Details', icon: '⛏️', base: 'block-details' },
+        { route: '#/workers', label: 'Workers Roster', icon: '👷', base: 'workers' },
+        { route: '#/new-worker-entry', label: 'New Worker Entry', icon: '➕', base: 'new-worker-entry' },
+        { route: `#/worker-details/${workers[0]?.workerId || 'WRK-A-001'}`, label: 'Worker Details', icon: '🪪', base: 'worker-details' },
+        { route: '#/alerts', label: 'Alerts & Incidents', icon: '⚠️', base: 'alerts', badge: metrics.unackAlerts },
+        { route: '#/emergency-response', label: 'Emergency Response', icon: '🚨', base: 'emergency-response' },
+        { route: '#/reports', label: 'Reports & Logs', icon: '📊', base: 'reports' },
+        { route: '#/settings', label: 'Settings & Hardware', icon: '⚙️', base: 'settings' },
+      ];
+
+      // Export CSV handler
+      const handleExportCSV = () => {
+        const headers = ['Worker ID', 'Helmet ID', 'Name', 'Block', 'Zone', 'Designation', 'Blood Group', 'Safety Score', 'Methane (ppm)', 'CO (ppm)', 'Oxygen %', 'Motion State', 'SOS', 'Status'];
+        const rows = workers.map(w => {
+          const score = calcSafetyScore(w);
+          return [
+            w.workerId, w.helmetId, `"${w.name}"`, w.block, `"${w.zone}"`, `"${w.designation}"`, w.bloodGroup,
+            score.score, w.telemetry.mq2_methane_ppm, w.telemetry.mq7_co_ppm, w.telemetry.oxygen_pct,
+            w.telemetry.motionState, w.telemetry.sosPressed ? 'YES' : 'NO', score.text
+          ];
+        });
+        const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement('a');
+        link.setAttribute('href', encodedUri);
+        link.setAttribute('download', `mineshield_shift_report_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      // IF NOT AUTHENTICATED AND ON LOGIN PAGE
+      if (!isAuthenticated && routeInfo.base === 'login') {
+        return (
+          <div className="min-h-screen bg-mine-950 flex flex-col justify-center items-center p-4 relative overflow-hidden selection:bg-hazard selection:text-mine-950">
+            {/* Background Grid Accent */}
+            <div className="absolute inset-0 bg-[radial-gradient(#1f2937_1px,transparent_1px)] [background-size:24px_24px] opacity-25"></div>
+            
+            <div className="max-w-md w-full bg-mine-900 border border-hazard/40 rounded-3xl p-8 shadow-2xl relative z-10 backdrop-blur-md">
+              <div className="text-center space-y-3 mb-8">
+                <div className="inline-flex p-4 bg-hazard/10 border border-hazard/30 rounded-2xl text-hazard shadow-lg">
+                  <HelmetIcon size={36} color="#f59e0b" />
+                </div>
+                <h1 className="text-2xl font-black tracking-wider text-mine-100 uppercase">
+                  Mine<span className="text-hazard">Shield</span>
+                </h1>
+                <p className="text-xs text-mine-400 uppercase tracking-widest font-semibold">
+                  Subterranean Safety Command Center
+                </p>
+                <div className="text-[11px] text-hazard bg-hazard/10 border border-hazard/20 py-1 px-3 rounded-full inline-block">
+                  DGMS Statutory Coal Mines Monitoring System
+                </div>
+              </div>
+
+              {loginError && (
+                <div className="mb-6 p-3.5 bg-red-950/70 border border-red-500/50 rounded-xl text-red-300 text-xs flex items-center space-x-2">
+                  <span>🚨</span>
+                  <span>{loginError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleLoginSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-mine-400 font-semibold mb-1.5">
+                    Operator ID
+                  </label>
+                  <input
+                    type="text"
+                    value={loginUser}
+                    onChange={(e) => setLoginUser(e.target.value)}
+                    placeholder="control.room"
+                    className="w-full bg-mine-950 border border-mine-700 rounded-xl px-4 py-3 text-mine-100 text-sm focus:outline-none focus:border-hazard transition"
+                  />
+                  <span className="text-[10px] text-mine-500 mt-1 block">Default: control.room</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-mine-400 font-semibold mb-1.5">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={loginPass}
+                    onChange={(e) => setLoginPass(e.target.value)}
+                    placeholder="••••"
+                    className="w-full bg-mine-950 border border-mine-700 rounded-xl px-4 py-3 text-mine-100 text-sm focus:outline-none focus:border-hazard transition"
+                  />
+                  <span className="text-[10px] text-mine-500 mt-1 block">Default: mine</span>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-hazard hover:bg-hazard-glow text-mine-950 font-bold py-3.5 rounded-xl uppercase tracking-wider text-xs transition duration-200 shadow-lg shadow-hazard/20 mt-4 flex items-center justify-center space-x-2"
+                >
+                  <span>Authorize Control Station</span>
+                  <span>➔</span>
+                </button>
+              </form>
+
+              <div className="mt-8 pt-6 border-t border-mine-800 text-center">
+                <p className="text-[11px] text-mine-400 font-sans">
+                  Privacy Compliant: Zero facial recognition storage. Biometric hardhat telemetry only.
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // REDIRECT TO LOGIN IF NOT LOGGED IN
+      if (!isAuthenticated && routeInfo.base !== 'login') {
+        window.location.hash = '#/login';
+        return null;
+      }
+
+      return (
+        <div className="min-h-screen flex flex-col bg-mine-950 text-mine-100">
+          {/* EVACUATION TOP BANNER IF ACTIVE */}
+          {evacuationActive && (
+            <div className="bg-red-600 text-white font-black text-xs py-2 px-4 text-center tracking-widest uppercase animate-flash-danger flex items-center justify-center space-x-3 z-50 sticky top-0">
+              <span className="text-base">🚨</span>
+              <span>MINE-WIDE GENERAL EVACUATION IN PROGRESS — ALL TEAMS PROCEED TO ESCAPE SHAFTS</span>
+              <button
+                onClick={() => setEvacuationActive(false)}
+                className="ml-4 bg-black/40 hover:bg-black/70 px-2 py-0.5 rounded text-[10px] uppercase border border-white/40"
+              >
+                Silence Alarm
+              </button>
+            </div>
+          )}
+
+          {/* TOP NAVBAR */}
+          <header className="h-16 bg-mine-900 border-b border-mine-800 px-4 md:px-6 flex items-center justify-between sticky top-0 z-40">
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="md:hidden p-2 rounded-xl bg-mine-800 text-mine-300 hover:text-white"
+                title="Toggle Menu"
+              >
+                ☰
+              </button>
+
+              <div
+                onClick={() => navigateTo('#/home')}
+                className="flex items-center space-x-2.5 cursor-pointer select-none"
+              >
+                <div className="p-2 bg-hazard/15 border border-hazard/40 rounded-xl text-hazard">
+                  <HelmetIcon size={20} color="#f59e0b" />
+                </div>
+                <div>
+                  <div className="font-black text-sm tracking-wider uppercase text-mine-100">
+                    Mine<span className="text-hazard">Shield</span>
+                  </div>
+                  <div className="text-[9px] text-mine-400 tracking-widest uppercase">
+                    Every Worker. Every Second.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Status Pill Bar */}
+            <div className="hidden lg:flex items-center space-x-3 text-xs">
+              <div className="bg-mine-950 border border-mine-800 px-3 py-1.5 rounded-full flex items-center space-x-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                <span className="text-mine-400">Shift 1:</span>
+                <span className="font-bold text-mine-200">{metrics.insideCount} Underground</span>
+              </div>
+
+              <div className="bg-mine-950 border border-mine-800 px-3 py-1.5 rounded-full flex items-center space-x-2">
+                <span className="text-mine-400">Time:</span>
+                <span className="font-bold text-hazard">{currentTime}</span>
+              </div>
+
+              {metrics.unackAlerts > 0 && (
+                <div
+                  onClick={() => navigateTo('#/alerts')}
+                  className="cursor-pointer bg-red-950/60 border border-red-500/80 px-3 py-1.5 rounded-full flex items-center space-x-2 text-red-400 hover:bg-red-900/60 transition"
+                >
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                  <span className="font-bold">{metrics.unackAlerts} Unacknowledged Alerts</span>
+                </div>
+              )}
+            </div>
+
+            {/* Operator Controls */}
+            <div className="flex items-center space-x-3 text-xs">
+              <div className="hidden sm:flex items-center space-x-2 bg-mine-800/80 border border-mine-700 px-3 py-1.5 rounded-xl">
+                <span className="text-hazard">●</span>
+                <span className="text-mine-300">control.room</span>
+              </div>
+
+              <button
+                onClick={() => { setIsAuthenticated(false); navigateTo('#/login'); }}
+                className="p-2 rounded-xl bg-mine-800 hover:bg-red-950/80 hover:border-red-600 border border-mine-700 text-mine-400 hover:text-red-300 transition"
+                title="Logout Control Station"
+              >
+                ⏻
+              </button>
+            </div>
+          </header>
+
+          <div className="flex-1 flex overflow-hidden">
+            {/* DESKTOP SIDEBAR */}
+            <aside className="hidden md:flex flex-col w-64 bg-mine-900/95 border-r border-mine-800 p-3 space-y-1 select-none overflow-y-auto">
+              <div className="px-3 py-2 text-[10px] uppercase font-bold tracking-widest text-mine-500">
+                Command Navigation
+              </div>
+
+              {NAV_ITEMS.map((item) => {
+                const isActive = routeInfo.base === item.base;
+                return (
+                  <button
+                    key={item.route}
+                    onClick={() => navigateTo(item.route)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition duration-150 ${
+                      isActive
+                        ? 'bg-hazard text-mine-950 shadow-md font-bold'
+                        : 'text-mine-300 hover:bg-mine-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2.5 truncate">
+                      <span>{item.icon}</span>
+                      <span className="truncate">{item.label}</span>
+                    </div>
+                    {item.badge > 0 && (
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isActive ? 'bg-mine-950 text-hazard' : 'bg-red-600 text-white'}`}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+
+              <div className="pt-4 mt-auto">
+                <div className="p-3 bg-mine-950 border border-mine-800 rounded-2xl space-y-2 text-[11px]">
+                  <div className="flex items-center justify-between text-mine-400">
+                    <span>LoRa IoT Mesh</span>
+                    <span className="text-emerald-400 font-bold">99.8%</span>
+                  </div>
+                  <div className="w-full bg-mine-800 h-1.5 rounded-full overflow-hidden">
+                    <div className="bg-emerald-500 h-full w-[99.8%]"></div>
+                  </div>
+                  <div className="text-[10px] text-mine-500">Subterranean Nodes: 48 Active</div>
+                </div>
+              </div>
+            </aside>
+
+            {/* MOBILE DRAWER */}
+            {isMobileMenuOpen && (
+              <div className="fixed inset-0 z-50 flex md:hidden">
+                <div
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="fixed inset-0 bg-black/70 backdrop-blur-sm"
+                ></div>
+                <div className="relative w-72 max-w-[85%] bg-mine-900 border-r border-mine-800 p-4 flex flex-col space-y-2 z-10 shadow-2xl animate-page-slide">
+                  <div className="flex items-center justify-between pb-3 border-b border-mine-800">
+                    <div className="flex items-center space-x-2">
+                      <HelmetIcon size={18} color="#f59e0b" />
+                      <span className="font-bold text-sm text-mine-100 uppercase">Navigation</span>
+                    </div>
+                    <button
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="text-mine-400 hover:text-white text-lg font-bold"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="flex-1 space-y-1 overflow-y-auto py-2">
+                    {NAV_ITEMS.map((item) => {
+                      const isActive = routeInfo.base === item.base;
+                      return (
+                        <button
+                          key={item.route}
+                          onClick={() => navigateTo(item.route)}
+                          className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-semibold ${
+                            isActive ? 'bg-hazard text-mine-950 font-bold' : 'text-mine-300 hover:bg-mine-800'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <span>{item.icon}</span>
+                            <span>{item.label}</span>
+                          </div>
+                          {item.badge > 0 && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-red-600 text-white font-bold">
+                              {item.badge}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="pt-2 border-t border-mine-800">
+                    <button
+                      onClick={() => { setIsAuthenticated(false); navigateTo('#/login'); }}
+                      className="w-full py-2.5 rounded-xl bg-red-950/60 border border-red-500/50 text-red-300 text-xs font-bold"
+                    >
+                      Logout Session
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* MAIN ROUTE CONTENT AREA (WITH SLIDE ANIMATION ON ROUTE CHANGE) */}
+            <main key={currentRoute} className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto animate-page-slide">
+              
+              {/* -------------------------------------------------------------
+                  ROUTE 1: HOME DASHBOARD
+              -------------------------------------------------------------- */}
+              {routeInfo.base === 'home' && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h1 className="text-xl md:text-2xl font-black uppercase tracking-wider text-mine-100 flex items-center space-x-3">
+                        <span>Mine Command Overview</span>
+                        <span className="text-xs bg-mine-800 text-mine-300 px-2.5 py-1 rounded-full font-mono normal-case font-normal border border-mine-700">
+                          Shift 1 (06:00 - 14:00)
+                        </span>
+                      </h1>
+                      <p className="text-xs text-mine-400 mt-1">
+                        DEMO MODE • Simulated biometric hardhat telemetry & DGMS safety workflow.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => setEvacuationActive(true)}
+                        className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold uppercase tracking-wider shadow-lg shadow-red-600/20 transition flex items-center space-x-2"
+                      >
+                        <span>🚨</span>
+                        <span>Sound Evacuation</span>
+                      </button>
+                      <button
+                        onClick={handleExportCSV}
+                        className="px-3.5 py-2.5 rounded-xl bg-mine-800 hover:bg-mine-700 border border-mine-700 text-mine-200 text-xs font-semibold flex items-center space-x-1.5"
+                      >
+                        <span>📥</span>
+                        <span>Export CSV</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Top Metric Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-mine-900 border border-mine-800 p-4 rounded-2xl">
+                      <div className="text-[11px] text-mine-400 uppercase font-semibold">Underground Personnel</div>
+                      <div className="text-2xl font-black text-mine-100 mt-1">{metrics.insideCount}</div>
+                      <div className="text-[10px] text-emerald-400 mt-1">● DEMO DATA • telemetry simulation</div>
+                    </div>
+
+                    <div className="bg-mine-900 border border-mine-800 p-4 rounded-2xl">
+                      <div className="text-[11px] text-mine-400 uppercase font-semibold">Safe Status</div>
+                      <div className="text-2xl font-black text-emerald-400 mt-1">{metrics.safeCount}</div>
+                      <div className="text-[10px] text-mine-400 mt-1">Nominal Vitals & Air</div>
+                    </div>
+
+                    <div className="bg-mine-900 border border-mine-800 p-4 rounded-2xl">
+                      <div className="text-[11px] text-mine-400 uppercase font-semibold">Elevated Caution</div>
+                      <div className="text-2xl font-black text-yellow-400 mt-1">{metrics.cautionCount}</div>
+                      <div className="text-[10px] text-yellow-400/80 mt-1">Warning threshold active</div>
+                    </div>
+
+                    <div className={`bg-mine-900 p-4 rounded-2xl border ${metrics.criticalCount > 0 ? 'border-red-500/80 animate-flash-danger' : 'border-mine-800'}`}>
+                      <div className="text-[11px] text-mine-400 uppercase font-semibold">Critical Distress</div>
+                      <div className="text-2xl font-black text-red-400 mt-1">{metrics.criticalCount}</div>
+                      <div className="text-[10px] text-red-400 mt-1">Requires immediate dispatch</div>
+                    </div>
+                  </div>
+
+                  {/* Active Incident Alert Banner */}
+                  {metrics.unackAlerts > 0 && (
+                    <div className="bg-red-950/40 border border-red-500/60 p-4 rounded-2xl space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2 text-red-400 font-bold text-xs uppercase tracking-wider">
+                          <span className="animate-ping">⚠️</span>
+                          <span>Active Unacknowledged Emergency Alerts ({metrics.unackAlerts})</span>
+                        </div>
+                        <button
+                          onClick={() => navigateTo('#/alerts')}
+                          className="text-xs text-hazard hover:underline font-bold"
+                        >
+                          View Alerts Center ➔
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {alerts.filter(a => !a.acknowledged).slice(0, 2).map(a => (
+                          <div key={a.id} className="bg-mine-900/90 border border-red-500/40 p-3 rounded-xl flex items-center justify-between text-xs">
+                            <div>
+                              <div className="font-bold text-red-300">{a.title}</div>
+                              <div className="text-[10px] text-mine-400">Worker: {a.workerId} | Block: {a.block} | Time: {a.time}</div>
+                            </div>
+                            <button
+                              onClick={() => navigateTo(`#/alert-details/${a.id}`)}
+                              className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-[10px]"
+                            >
+                              Action
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Subterranean Block Summary Cards */}
+                  <div>
+                    <h2 className="text-xs font-bold uppercase tracking-widest text-mine-400 mb-3">
+                      Subterranean Blocks Overview
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                      {Object.values(MINE_BLOCKS).map(b => {
+                        const count = workers.filter(w => w.block === b.id).length;
+                        const hasCritical = workers.some(w => w.block === b.id && calcSafetyScore(w).tier === 'CRITICAL');
+                        return (
+                          <div
+                            key={b.id}
+                            onClick={() => navigateTo(`#/block-details/${b.id}`)}
+                            className={`cursor-pointer p-4 rounded-2xl bg-mine-900 border transition hover:border-hazard ${
+                              hasCritical ? 'border-red-500/70 shadow-lg shadow-red-950/50' : 'border-mine-800'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between text-xs mb-2">
+                              <span className="font-bold text-mine-200">Block {b.id}</span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-mine-800 text-mine-400">
+                                {b.depth}
+                              </span>
+                            </div>
+                            <div className="text-xs text-mine-400 truncate mb-3">{b.name}</div>
+                            <div className="flex items-center justify-between text-xs pt-2 border-t border-mine-800">
+                              <span className="text-mine-400">{count} Workers</span>
+                              {hasCritical ? (
+                                <span className="text-red-400 font-bold text-[10px] flex items-center space-x-1">
+                                  <span>🚨</span>
+                                  <span>Alert</span>
+                                </span>
+                              ) : (
+                                <span className="text-emerald-400 text-[10px]">● Nominal</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Quick Personnel Table */}
+                  <div className="bg-mine-900 border border-mine-800 rounded-2xl p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="text-xs font-bold uppercase tracking-wider text-mine-300">
+                        Underground Telemetry Feed (Sample)
+                      </div>
+                      <button
+                        onClick={() => navigateTo('#/workers')}
+                        className="text-xs text-hazard hover:underline font-bold"
+                      >
+                        All 30 Workers ➔
+                      </button>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-mine-800 text-mine-500 text-[10px] uppercase font-bold tracking-wider">
+                            <th className="py-2.5 px-3">Helmet</th>
+                            <th className="py-2.5 px-3">Worker ID</th>
+                            <th className="py-2.5 px-3">Name</th>
+                            <th className="py-2.5 px-3">Block / Zone</th>
+                            <th className="py-2.5 px-3">Safety Score</th>
+                            <th className="py-2.5 px-3">Methane</th>
+                            <th className="py-2.5 px-3 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-mine-800/60">
+                          {workers.slice(0, 6).map(w => {
+                            const score = calcSafetyScore(w);
+                            const helmet = getHelmetColor(w);
+                            return (
+                              <tr key={w.workerId} className="hover:bg-mine-800/40 transition">
+                                <td className="py-2.5 px-3">
+                                  <HelmetIcon size={18} color={helmet.fill} />
+                                </td>
+                                <td className="py-2.5 px-3 font-bold text-mine-100">{w.workerId}</td>
+                                <td className="py-2.5 px-3 text-mine-300">{w.name}</td>
+                                <td className="py-2.5 px-3 text-mine-400">Block {w.block}</td>
+                                <td className="py-2.5 px-3">
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ backgroundColor: `${score.color}20`, color: score.color }}>
+                                    {score.score}% ({score.tier})
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 font-mono text-mine-300">{w.telemetry.mq2_methane_ppm} ppm</td>
+                                <td className="py-2.5 px-3 text-right">
+                                  <button
+                                    onClick={() => navigateTo(`#/worker-details/${w.workerId}`)}
+                                    className="text-hazard hover:underline font-bold text-[11px]"
+                                  >
+                                    View
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* -------------------------------------------------------------
+                  ROUTE 2: MINE OVERVIEW DASHBOARD (INTERACTIVE SVG MAP)
+              -------------------------------------------------------------- */}
+              {routeInfo.base === 'mine-overview' && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h1 className="text-xl md:text-2xl font-black uppercase tracking-wider text-mine-100">
+                        Subterranean Mine Schematic
+                      </h1>
+                      <p className="text-xs text-mine-400 mt-1">
+                        Interactive cross-section schematic of Blocks A–E, evacuation shafts, and real-time helmet node positions.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center space-x-2 text-xs">
+                      <span className="text-mine-400">Filter Block:</span>
+                      <select
+                        value={selectedBlockFilter}
+                        onChange={(e) => setSelectedBlockFilter(e.target.value)}
+                        className="bg-mine-900 border border-mine-700 rounded-xl px-3 py-1.5 text-xs text-mine-100 focus:outline-none focus:border-hazard"
+                      >
+                        <option value="ALL">All Blocks (A - E)</option>
+                        <option value="A">Block A</option>
+                        <option value="B">Block B</option>
+                        <option value="C">Block C</option>
+                        <option value="D">Block D</option>
+                        <option value="E">Block E</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Helmet Color Legend */}
+                  <div className="bg-mine-900 border border-mine-800 p-3 rounded-2xl flex flex-wrap items-center gap-3 text-[11px]">
+                    <span className="font-bold text-mine-400 uppercase tracking-wider">Helmet State Legend:</span>
+                    <div className="flex items-center space-x-1.5"><HelmetIcon size={16} color="#10b981" /><span className="text-mine-300">Green: Safe (&ge;80%)</span></div>
+                    <div className="flex items-center space-x-1.5"><HelmetIcon size={16} color="#eab308" /><span className="text-mine-300">Yellow: Caution (60–79%)</span></div>
+                    <div className="flex items-center space-x-1.5"><HelmetIcon size={16} color="#f97316" /><span className="text-mine-300">Orange: High Risk (40–59%)</span></div>
+                    <div className="flex items-center space-x-1.5"><HelmetIcon size={16} color="#ef4444" /><span className="text-mine-300">Red: Critical / SOS (&lt;40%)</span></div>
+                    <div className="flex items-center space-x-1.5"><HelmetIcon size={16} color="#6b7280" /><span className="text-mine-300">Gray: Offline</span></div>
+                    <div className="flex items-center space-x-1.5"><HelmetIcon size={16} color="#3b82f6" /><span className="text-mine-300">Blue: Rescue Team Active</span></div>
+                  </div>
+
+                  {/* Interactive SVG Subterranean Map */}
+                  <div className="bg-mine-900 border border-mine-800 rounded-3xl p-6 relative overflow-hidden shadow-2xl">
+                    <svg viewBox="0 0 900 500" className="w-full h-auto select-none">
+                      {/* Surface Terrain */}
+                      <path d="M 0 60 Q 250 45, 500 65 T 900 55 L 900 0 L 0 0 Z" fill="#1c232d" />
+                      <line x1="0" y1="60" x2="900" y2="60" stroke="#484f58" strokeWidth="2" strokeDasharray="6 4" />
+                      <text x="30" y="35" fill="#8b949e" fontSize="11" fontWeight="bold" fontFamily="monospace">SURFACE LEVEL (GROUND 0.00m)</text>
+
+                      {/* Main Vertical Shafts */}
+                      <line x1="150" y1="60" x2="150" y2="440" stroke="#30363d" strokeWidth="12" />
+                      <text x="135" y="470" fill="#f59e0b" fontSize="10" fontWeight="bold">SHAFT 1</text>
+
+                      <line x1="450" y1="60" x2="450" y2="440" stroke="#30363d" strokeWidth="12" />
+                      <text x="435" y="470" fill="#f59e0b" fontSize="10" fontWeight="bold">SHAFT 2</text>
+
+                      <line x1="750" y1="60" x2="750" y2="440" stroke="#30363d" strokeWidth="12" />
+                      <text x="735" y="470" fill="#f59e0b" fontSize="10" fontWeight="bold">SHAFT 3</text>
+
+                      {/* Geological Horizons & Drifts */}
+                      {/* Block A: Depth 180m */}
+                      <g onClick={() => navigateTo('#/block-details/A')} className="cursor-pointer group">
+                        <rect x="150" y="140" width="280" height="40" rx="8" fill="#161b22" stroke="#10b981" strokeWidth="2" />
+                        <text x="170" y="165" fill="#10b981" fontSize="12" fontWeight="bold">BLOCK A: North Extraction Drift (180m)</text>
+                      </g>
+
+                      {/* Block B: Depth 260m */}
+                      <g onClick={() => navigateTo('#/block-details/B')} className="cursor-pointer group">
+                        <rect x="450" y="200" width="280" height="42" rx="8" fill="#161b22" stroke="#ef4444" strokeWidth="2" />
+                        <text x="470" y="225" fill="#ef4444" fontSize="12" fontWeight="bold">BLOCK B: East Longwall (260m) - CH4 SURGE</text>
+                      </g>
+
+                      {/* Block C: Depth 340m */}
+                      <g onClick={() => navigateTo('#/block-details/C')} className="cursor-pointer group">
+                        <rect x="150" y="280" width="280" height="42" rx="8" fill="#161b22" stroke="#06b6d4" strokeWidth="2" />
+                        <text x="170" y="305" fill="#06b6d4" fontSize="12" fontWeight="bold">BLOCK C: Deep Sump (340m) - WATER INGRESS</text>
+                      </g>
+
+                      {/* Block D: Depth 290m */}
+                      <g onClick={() => navigateTo('#/block-details/D')} className="cursor-pointer group">
+                        <rect x="450" y="320" width="280" height="42" rx="8" fill="#161b22" stroke="#f97316" strokeWidth="2" />
+                        <text x="470" y="345" fill="#f97316" fontSize="12" fontWeight="bold">BLOCK D: South Depillaring (290m) - SOS ALERT</text>
+                      </g>
+
+                      {/* Block E: Depth 210m */}
+                      <g onClick={() => navigateTo('#/block-details/E')} className="cursor-pointer group">
+                        <rect x="250" y="390" width="400" height="42" rx="8" fill="#161b22" stroke="#eab308" strokeWidth="2" />
+                        <text x="270" y="415" fill="#eab308" fontSize="12" fontWeight="bold">BLOCK E: Vent Return Corridor (210m) - NO MOTION</text>
+                      </g>
+
+                      {/* Plotting Workers as Helmet Nodes */}
+                      {workers.map((w, idx) => {
+                        const helmet = getHelmetColor(w);
+                        let cx = 200 + (idx % 6) * 45;
+                        let cy = 160;
+                        if (w.block === 'B') { cx = 490 + (idx % 6) * 40; cy = 220; }
+                        if (w.block === 'C') { cx = 190 + (idx % 6) * 40; cy = 300; }
+                        if (w.block === 'D') { cx = 490 + (idx % 6) * 40; cy = 340; }
+                        if (w.block === 'E') { cx = 310 + (idx % 6) * 55; cy = 410; }
+
+                        return (
+                          <g
+                            key={w.workerId}
+                            onClick={() => navigateTo(`#/worker-details/${w.workerId}`)}
+                            className="cursor-pointer hover:opacity-80"
+                          >
+                            <circle cx={cx} cy={cy} r="9" fill="#0d1117" stroke={helmet.fill} strokeWidth="2" />
+                            <circle cx={cx} cy={cy} r="4" fill={helmet.fill} />
+                            <text x={cx - 14} y={cy - 12} fill="#c9d1d9" fontSize="8" fontWeight="bold" fontFamily="monospace">
+                              {w.workerId.slice(-3)}
+                            </text>
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+                </div>
+              )}
+
+              {/* -------------------------------------------------------------
+                  ROUTE 3: BLOCK DETAILS DASHBOARD
+              -------------------------------------------------------------- */}
+              {routeInfo.base === 'block-details' && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center space-x-2 text-xs text-hazard uppercase font-bold tracking-widest">
+                        <span>Block Telemetry & Diagnostics</span>
+                      </div>
+                      <h1 className="text-xl md:text-2xl font-black uppercase tracking-wider text-mine-100 mt-1">
+                        {currentBlockData.name}
+                      </h1>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      {['A', 'B', 'C', 'D', 'E'].map(b => (
+                        <button
+                          key={b}
+                          onClick={() => navigateTo(`#/block-details/${b}`)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold ${
+                            currentBlockData.id === b ? 'bg-hazard text-mine-950' : 'bg-mine-900 border border-mine-800 text-mine-300'
+                          }`}
+                        >
+                          Block {b}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Atmospheric Sensor Gauges */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-mine-900 border border-mine-800 p-4 rounded-2xl">
+                      <div className="text-[11px] text-mine-400 uppercase font-semibold">Methane Gas (CH4)</div>
+                      <div className={`text-2xl font-black mt-1 ${currentBlockData.id === 'B' ? 'text-red-400 animate-pulse' : 'text-emerald-400'}`}>
+                        {currentBlockData.id === 'B' ? '890 ppm (CRITICAL)' : '24 ppm (NORMAL)'}
+                      </div>
+                      <div className="text-[10px] text-mine-500 mt-1">DGMS Threshold: 150 ppm</div>
+                    </div>
+
+                    <div className="bg-mine-900 border border-mine-800 p-4 rounded-2xl">
+                      <div className="text-[11px] text-mine-400 uppercase font-semibold">Carbon Monoxide (CO)</div>
+                      <div className={`text-2xl font-black mt-1 ${currentBlockData.id === 'B' ? 'text-orange-400' : 'text-emerald-400'}`}>
+                        {currentBlockData.id === 'B' ? '64 ppm (ELEVATED)' : '6 ppm (SAFE)'}
+                      </div>
+                      <div className="text-[10px] text-mine-500 mt-1">Safe Limit: &lt; 25 ppm</div>
+                    </div>
+
+                    <div className="bg-mine-900 border border-mine-800 p-4 rounded-2xl">
+                      <div className="text-[11px] text-mine-400 uppercase font-semibold">Oxygen (O2) Concentration</div>
+                      <div className={`text-2xl font-black mt-1 ${currentBlockData.id === 'B' ? 'text-red-400' : 'text-emerald-400'}`}>
+                        {currentBlockData.id === 'B' ? '17.2% (DEFICIENT)' : '20.8% (OPTIMAL)'}
+                      </div>
+                      <div className="text-[10px] text-mine-500 mt-1">Statutory Min: 19.5%</div>
+                    </div>
+
+                    <div className="bg-mine-900 border border-mine-800 p-4 rounded-2xl">
+                      <div className="text-[11px] text-mine-400 uppercase font-semibold">Water Sump Sensor</div>
+                      <div className={`text-2xl font-black mt-1 ${currentBlockData.id === 'C' ? 'text-cyan-400 animate-pulse' : 'text-mine-300'}`}>
+                        {currentBlockData.id === 'C' ? 'FLOODING DETECTED' : 'DRY / NOMINAL'}
+                      </div>
+                      <div className="text-[10px] text-mine-500 mt-1">Level: {currentBlockData.id === 'C' ? '+1.8m surge' : '0.1m'}</div>
+                    </div>
+                  </div>
+
+                  {/* Evacuation Route & Safety Protocol Notice */}
+                  <div className="bg-mine-900/90 border border-mine-800 p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                    <div>
+                      <div className="font-bold text-mine-200 uppercase tracking-wider">Designated Primary Emergency Egress</div>
+                      <div className="text-mine-400 text-[11px] mt-0.5">{currentBlockData.exit}</div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] px-3 py-1 rounded-full font-bold uppercase" style={{ backgroundColor: `${currentBlockData.color}20`, color: currentBlockData.color }}>
+                        {currentBlockData.issue}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Personnel Assigned to this Block */}
+                  <div className="bg-mine-900 border border-mine-800 rounded-2xl p-4">
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-mine-300 mb-3">
+                      Workers Assigned in Block {currentBlockData.id} ({workers.filter(w => w.block === currentBlockData.id).length})
+                    </h2>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {workers.filter(w => w.block === currentBlockData.id).map(w => {
+                        const score = calcSafetyScore(w);
+                        const helmet = getHelmetColor(w);
+                        return (
+                          <div
+                            key={w.workerId}
+                            onClick={() => navigateTo(`#/worker-details/${w.workerId}`)}
+                            className="cursor-pointer bg-mine-950 border border-mine-800 hover:border-hazard p-3 rounded-xl transition flex items-center justify-between"
+                          >
+                            <div className="flex items-center space-x-3">
+                              <HelmetIcon size={24} color={helmet.fill} />
+                              <div>
+                                <div className="font-bold text-xs text-mine-100">{w.name}</div>
+                                <div className="text-[10px] text-mine-400">{w.workerId} • {w.designation}</div>
+                              </div>
+                            </div>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ backgroundColor: `${score.color}20`, color: score.color }}>
+                              {score.score}%
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* -------------------------------------------------------------
+                  ROUTE 4: WORKERS ROSTER DASHBOARD
+              -------------------------------------------------------------- */}
+              {routeInfo.base === 'workers' && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h1 className="text-xl md:text-2xl font-black uppercase tracking-wider text-mine-100">
+                        Personnel Roster & Hardhat Directory
+                      </h1>
+                      <p className="text-xs text-mine-400 mt-1">
+                        Active subterranean miners, role designations, blood groups, and live vitals.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => navigateTo('#/new-worker-entry')}
+                      className="px-4 py-2.5 rounded-xl bg-hazard hover:bg-hazard-glow text-mine-950 font-bold text-xs uppercase tracking-wider shadow-lg shadow-hazard/20 transition flex items-center space-x-2"
+                    >
+                      <span>➕</span>
+                      <span>Register New Worker</span>
+                    </button>
+                  </div>
+
+                  {/* Multi-Field Search & Filter Bar */}
+                  <div className="bg-mine-900 border border-mine-800 p-4 rounded-2xl flex flex-col md:flex-row gap-3 items-center">
+                    <div className="flex-1 w-full relative">
+                      <input
+                        type="text"
+                        value={workerSearch}
+                        onChange={(e) => setWorkerSearch(e.target.value)}
+                        placeholder="Search by Name, Worker ID, Helmet ID, Role, or Blood Group..."
+                        className="w-full bg-mine-950 border border-mine-700 rounded-xl px-4 py-2.5 text-xs text-mine-100 focus:outline-none focus:border-hazard"
+                      />
+                      {workerSearch && (
+                        <button
+                          onClick={() => setWorkerSearch('')}
+                          className="absolute right-3 top-2.5 text-xs text-mine-500 hover:text-white"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center space-x-2 w-full md:w-auto">
+                      <span className="text-xs text-mine-400">Block:</span>
+                      <select
+                        value={selectedBlockFilter}
+                        onChange={(e) => setSelectedBlockFilter(e.target.value)}
+                        className="bg-mine-950 border border-mine-700 rounded-xl px-3 py-2.5 text-xs text-mine-100 focus:outline-none focus:border-hazard"
+                      >
+                        <option value="ALL">All Blocks</option>
+                        <option value="A">Block A</option>
+                        <option value="B">Block B</option>
+                        <option value="C">Block C</option>
+                        <option value="D">Block D</option>
+                        <option value="E">Block E</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Workers Table */}
+                  <div className="bg-mine-900 border border-mine-800 rounded-2xl p-4 overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-mine-800 text-mine-500 text-[10px] uppercase font-bold tracking-wider">
+                            <th className="py-2.5 px-3">Status</th>
+                            <th className="py-2.5 px-3">Worker ID</th>
+                            <th className="py-2.5 px-3">Full Name</th>
+                            <th className="py-2.5 px-3">Block / Zone</th>
+                            <th className="py-2.5 px-3">Designation</th>
+                            <th className="py-2.5 px-3">Blood Group</th>
+                            <th className="py-2.5 px-3">Safety Score</th>
+                            <th className="py-2.5 px-3 text-right">Details</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-mine-800/60">
+                          {filteredWorkers.map(w => {
+                            const score = calcSafetyScore(w);
+                            const helmet = getHelmetColor(w);
+                            return (
+                              <tr key={w.workerId} className="hover:bg-mine-800/40 transition">
+                                <td className="py-2.5 px-3">
+                                  <HelmetIcon size={20} color={helmet.fill} />
+                                </td>
+                                <td className="py-2.5 px-3 font-bold text-mine-100 font-mono">{w.workerId}</td>
+                                <td className="py-2.5 px-3 text-mine-200 font-medium">{w.name}</td>
+                                <td className="py-2.5 px-3 text-mine-400">Block {w.block} • {w.zone.split('(')[0]}</td>
+                                <td className="py-2.5 px-3 text-mine-300">{w.designation}</td>
+                                <td className="py-2.5 px-3 font-mono font-bold text-hazard">{w.bloodGroup}</td>
+                                <td className="py-2.5 px-3">
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ backgroundColor: `${score.color}20`, color: score.color }}>
+                                    {score.score}% ({score.tier})
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 text-right">
+                                  <button
+                                    onClick={() => navigateTo(`#/worker-details/${w.workerId}`)}
+                                    className="px-2.5 py-1 rounded bg-mine-800 hover:bg-hazard hover:text-mine-950 font-bold text-[10px] text-mine-200 transition"
+                                  >
+                                    View Profile ➔
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* -------------------------------------------------------------
+                  ROUTE 5: NEW WORKER ENTRY DASHBOARD
+              -------------------------------------------------------------- */}
+              {routeInfo.base === 'new-worker-entry' && (
+                <div className="max-w-2xl mx-auto space-y-6">
+                  <div>
+                    <h1 className="text-xl md:text-2xl font-black uppercase tracking-wider text-mine-100">
+                      Subterranean Personnel Registration
+                    </h1>
+                    <p className="text-xs text-mine-400 mt-1">
+                      Induct personnel onto subterranean shifts and link biometric hardhat telemetry beacons.
+                    </p>
+                  </div>
+
+                  {entryError && (
+                    <div className="p-3.5 bg-red-950/70 border border-red-500/50 rounded-xl text-red-300 text-xs flex items-center space-x-2">
+                      <span>🚨</span>
+                      <span>{entryError}</span>
+                    </div>
+                  )}
+
+                  {entrySuccess && (
+                    <div className="p-3.5 bg-emerald-950/70 border border-emerald-500/50 rounded-xl text-emerald-300 text-xs flex items-center space-x-2">
+                      <span>✓</span>
+                      <span>{entrySuccess}</span>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleNewWorkerSubmit} className="bg-mine-900 border border-mine-800 rounded-3xl p-6 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[11px] uppercase tracking-wider text-mine-400 font-semibold mb-1">
+                          Worker ID (Must Be Unique) *
+                        </label>
+                        <input
+                          type="text"
+                          value={newWorker.workerId}
+                          onChange={(e) => setNewWorker({ ...newWorker, workerId: e.target.value })}
+                          placeholder="WRK-A-007"
+                          className="w-full bg-mine-950 border border-mine-700 rounded-xl px-3.5 py-2.5 text-xs text-mine-100 focus:outline-none focus:border-hazard"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] uppercase tracking-wider text-mine-400 font-semibold mb-1">
+                          Helmet Telemetry Beacon ID *
+                        </label>
+                        <input
+                          type="text"
+                          value={newWorker.helmetId}
+                          onChange={(e) => setNewWorker({ ...newWorker, helmetId: e.target.value })}
+                          placeholder="HLM-A-007"
+                          className="w-full bg-mine-950 border border-mine-700 rounded-xl px-3.5 py-2.5 text-xs text-mine-100 focus:outline-none focus:border-hazard"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] uppercase tracking-wider text-mine-400 font-semibold mb-1">
+                        Full Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={newWorker.name}
+                        onChange={(e) => setNewWorker({ ...newWorker, name: e.target.value })}
+                        placeholder="e.g. Ramesh Kumar Verma"
+                        className="w-full bg-mine-950 border border-mine-700 rounded-xl px-3.5 py-2.5 text-xs text-mine-100 focus:outline-none focus:border-hazard"
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-[11px] uppercase tracking-wider text-mine-400 font-semibold mb-1">
+                          Assigned Block
+                        </label>
+                        <select
+                          value={newWorker.block}
+                          onChange={(e) => setNewWorker({ ...newWorker, block: e.target.value })}
+                          className="w-full bg-mine-950 border border-mine-700 rounded-xl px-3.5 py-2.5 text-xs text-mine-100 focus:outline-none focus:border-hazard"
+                        >
+                          <option value="A">Block A</option>
+                          <option value="B">Block B</option>
+                          <option value="C">Block C</option>
+                          <option value="D">Block D</option>
+                          <option value="E">Block E</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] uppercase tracking-wider text-mine-400 font-semibold mb-1">
+                          Blood Group
+                        </label>
+                        <select
+                          value={newWorker.bloodGroup}
+                          onChange={(e) => setNewWorker({ ...newWorker, bloodGroup: e.target.value })}
+                          className="w-full bg-mine-950 border border-mine-700 rounded-xl px-3.5 py-2.5 text-xs text-mine-100 focus:outline-none focus:border-hazard"
+                        >
+                          <option value="O+">O+</option>
+                          <option value="O-">O-</option>
+                          <option value="A+">A+</option>
+                          <option value="A-">A-</option>
+                          <option value="B+">B+</option>
+                          <option value="B-">B-</option>
+                          <option value="AB+">AB+</option>
+                          <option value="AB-">AB-</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] uppercase tracking-wider text-mine-400 font-semibold mb-1">
+                          Shift Timing
+                        </label>
+                        <select
+                          value={newWorker.shift}
+                          onChange={(e) => setNewWorker({ ...newWorker, shift: e.target.value })}
+                          className="w-full bg-mine-950 border border-mine-700 rounded-xl px-3.5 py-2.5 text-xs text-mine-100 focus:outline-none focus:border-hazard"
+                        >
+                          <option value="Morning (06:00 - 14:00)">Morning (06:00 - 14:00)</option>
+                          <option value="Afternoon (14:00 - 22:00)">Afternoon (14:00 - 22:00)</option>
+                          <option value="Night (22:00 - 06:00)">Night (22:00 - 06:00)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[11px] uppercase tracking-wider text-mine-400 font-semibold mb-1">
+                          Role / Designation
+                        </label>
+                        <input
+                          type="text"
+                          value={newWorker.designation}
+                          onChange={(e) => setNewWorker({ ...newWorker, designation: e.target.value })}
+                          placeholder="e.g. Timber Bolter"
+                          className="w-full bg-mine-950 border border-mine-700 rounded-xl px-3.5 py-2.5 text-xs text-mine-100 focus:outline-none focus:border-hazard"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] uppercase tracking-wider text-mine-400 font-semibold mb-1">
+                          Emergency Kin Contact
+                        </label>
+                        <input
+                          type="text"
+                          value={newWorker.emergencyContact}
+                          onChange={(e) => setNewWorker({ ...newWorker, emergencyContact: e.target.value })}
+                          placeholder="+91 94311 XXXXX (Relation)"
+                          className="w-full bg-mine-950 border border-mine-700 rounded-xl px-3.5 py-2.5 text-xs text-mine-100 focus:outline-none focus:border-hazard"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full py-3.5 rounded-xl bg-hazard hover:bg-hazard-glow text-mine-950 font-bold text-xs uppercase tracking-wider shadow-lg shadow-hazard/20 transition mt-2"
+                    >
+                      Authorize & Register Under DGMS Shift Record
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* -------------------------------------------------------------
+                  ROUTE 6: WORKER DETAILS & PROFILE DASHBOARD (WITH CUSTOM ANIMATIONS)
+              -------------------------------------------------------------- */}
+              {routeInfo.base === 'worker-details' && currentWorker && (
+                <div className="space-y-6">
+                  {/* Top Bar with Navigation Back */}
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => navigateTo('#/workers')}
+                      className="text-xs text-mine-400 hover:text-white flex items-center space-x-1"
+                    >
+                      <span>← Back to Roster</span>
+                    </button>
+
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[10px] text-mine-400 uppercase tracking-widest font-mono">
+                        Biometric Hardhat Node: {currentWorker.helmetId}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Profile Header Card */}
+                  {(() => {
+                    const score = calcSafetyScore(currentWorker);
+                    const helmet = getHelmetColor(currentWorker);
+                    return (
+                      <div className="bg-mine-900 border border-mine-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden profile-section-anim">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                          
+                          {/* Anonymous Helmet Avatar with Gentle Status Pulse */}
+                          <div className="flex items-center space-x-5">
+                            <div
+                              className="p-5 rounded-2xl bg-mine-950 border border-mine-800 profile-helmet-pulse shadow-xl flex items-center justify-center"
+                              style={{ '--pulse-color': helmet.fill }}
+                            >
+                              <HelmetIcon size={56} color={helmet.fill} />
+                            </div>
+
+                            <div>
+                              <div className="flex items-center space-x-2">
+                                <h1 className="text-xl md:text-2xl font-black text-mine-100 uppercase tracking-wide">
+                                  {currentWorker.name}
+                                </h1>
+                                <span className="text-xs px-2 py-0.5 rounded font-mono font-bold bg-mine-800 text-mine-300">
+                                  {currentWorker.workerId}
+                                </span>
+                              </div>
+                              <p className="text-xs text-mine-400 mt-1">
+                                {currentWorker.designation} • {currentWorker.zone}
+                              </p>
+                              <div className="flex flex-wrap gap-2 mt-2.5 text-[10px]">
+                                <span className="bg-mine-950 border border-mine-700 px-2.5 py-1 rounded-full text-hazard font-bold">
+                                  Blood Group: {currentWorker.bloodGroup}
+                                </span>
+                                <span className="bg-mine-950 border border-mine-700 px-2.5 py-1 rounded-full text-mine-300">
+                                  Shift: {currentWorker.shift}
+                                </span>
+                                <span className="bg-mine-950 border border-mine-700 px-2.5 py-1 rounded-full text-mine-300">
+                                  Entry: {currentWorker.entryTime}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Animated Safety Score Meter */}
+                          <div className="bg-mine-950 border border-mine-800 p-4 rounded-2xl flex items-center space-x-4 min-w-[220px]">
+                            <div className="relative w-16 h-16 flex items-center justify-center">
+                              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                                <path
+                                  className="text-mine-800"
+                                  strokeWidth="3.5"
+                                  stroke="currentColor"
+                                  fill="none"
+                                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                />
+                                <path
+                                  strokeWidth="3.5"
+                                  strokeDasharray={`${score.score}, 100`}
+                                  strokeLinecap="round"
+                                  stroke={score.color}
+                                  fill="none"
+                                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                  style={{ transition: 'stroke-dasharray 1.2s ease-out' }}
+                                />
+                              </svg>
+                              <span className="absolute text-sm font-black font-mono" style={{ color: score.color }}>
+                                {score.score}%
+                              </span>
+                            </div>
+
+                            <div>
+                              <div className="text-[10px] uppercase font-bold text-mine-400">Safety Rating</div>
+                              <div className="text-xs font-black uppercase mt-0.5" style={{ color: score.color }}>
+                                {score.tier}
+                              </div>
+                              <div className="text-[9px] text-mine-500 mt-1">Live AI composite index</div>
+                            </div>
+                          </div>
+
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Staggered Live Sensor Vitals Grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 profile-section-anim" style={{ animationDelay: '100ms' }}>
+                    <div className="bg-mine-900 border border-mine-800 p-4 rounded-2xl">
+                      <div className="text-[10px] text-mine-400 uppercase font-semibold">Methane Sensor (MQ-2)</div>
+                      <div className="text-xl font-black text-mine-100 font-mono mt-1">
+                        {currentWorker.telemetry.mq2_methane_ppm} <span className="text-xs text-mine-400 font-normal">ppm</span>
+                      </div>
+                      <div className="text-[10px] text-emerald-400 mt-1">Safe range: &lt; 150 ppm</div>
+                    </div>
+
+                    <div className="bg-mine-900 border border-mine-800 p-4 rounded-2xl">
+                      <div className="text-[10px] text-mine-400 uppercase font-semibold">Carbon Monoxide (MQ-7)</div>
+                      <div className="text-xl font-black text-mine-100 font-mono mt-1">
+                        {currentWorker.telemetry.mq7_co_ppm} <span className="text-xs text-mine-400 font-normal">ppm</span>
+                      </div>
+                      <div className="text-[10px] text-emerald-400 mt-1">Safe range: &lt; 25 ppm</div>
+                    </div>
+
+                    <div className="bg-mine-900 border border-mine-800 p-4 rounded-2xl">
+                      <div className="text-[10px] text-mine-400 uppercase font-semibold">Ambient Temperature</div>
+                      <div className="text-xl font-black text-mine-100 font-mono mt-1">
+                        {currentWorker.telemetry.temp_c}°C
+                      </div>
+                      <div className="text-[10px] text-mine-400 mt-1">Humidity: {currentWorker.telemetry.humidity_pct}%</div>
+                    </div>
+
+                    <div className="bg-mine-900 border border-mine-800 p-4 rounded-2xl">
+                      <div className="text-[10px] text-mine-400 uppercase font-semibold">Motion & Inactivity</div>
+                      <div className={`text-xl font-black font-mono mt-1 ${currentWorker.telemetry.motionState === 'IMMOBILE' ? 'text-red-400 animate-pulse' : 'text-emerald-400'}`}>
+                        {currentWorker.telemetry.motionState}
+                      </div>
+                      <div className="text-[10px] text-mine-400 mt-1">
+                        Fall: {currentWorker.telemetry.fallDetected ? 'YES' : 'NO'} | SOS: {currentWorker.telemetry.sosPressed ? 'PRESSED' : 'NORMAL'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Kin Contacts & DGMS Audit History */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 profile-section-anim" style={{ animationDelay: '200ms' }}>
+                    <div className="bg-mine-900 border border-mine-800 p-5 rounded-2xl space-y-3">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-mine-300">
+                        Emergency Kin Contacts
+                      </h3>
+                      <div className="text-xs space-y-2 text-mine-300">
+                        <div className="flex justify-between py-1 border-b border-mine-800">
+                          <span className="text-mine-400">Emergency Kin:</span>
+                          <span className="font-bold text-hazard">{currentWorker.emergencyContact}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-mine-800">
+                          <span className="text-mine-400">Personal Phone:</span>
+                          <span>{currentWorker.homePhone}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-mine-800">
+                          <span className="text-mine-400">Medical Notes:</span>
+                          <span>{currentWorker.medicalNotes}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-mine-900 border border-mine-800 p-5 rounded-2xl space-y-3">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-mine-300">
+                        Recent Shift Telemetry Logs
+                      </h3>
+                      <ul className="text-xs space-y-2 text-mine-400">
+                        {currentWorker.history.map((h, i) => (
+                          <li key={i} className="flex items-start space-x-2">
+                            <span className="text-hazard mt-0.5">●</span>
+                            <span>{h}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* -------------------------------------------------------------
+                  ROUTE 7: ALERTS & INCIDENTS DASHBOARD
+              -------------------------------------------------------------- */}
+              {routeInfo.base === 'alerts' && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h1 className="text-xl md:text-2xl font-black uppercase tracking-wider text-mine-100">
+                        Emergency Alert & Incident Command
+                      </h1>
+                      <p className="text-xs text-mine-400 mt-1">
+                        Active distress signals, gas threshold violations, and incident response tracking.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => {
+                          setAlerts(alerts.map(a => ({ ...a, acknowledged: true })));
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-mine-800 hover:bg-mine-700 text-mine-200 text-xs font-bold"
+                      >
+                        Acknowledge All ({metrics.unackAlerts})
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Alerts Feed */}
+                  <div className="space-y-3">
+                    {alerts.map(a => (
+                      <div
+                        key={a.id}
+                        className={`p-4 rounded-2xl border transition ${
+                          !a.acknowledged
+                            ? 'bg-red-950/40 border-red-500/80 animate-flash-danger'
+                            : 'bg-mine-900 border-mine-800'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-start space-x-3">
+                            <span className="text-xl mt-0.5">{!a.acknowledged ? '🚨' : '⚠️'}</span>
+                            <div>
+                              <div className="flex items-center space-x-2">
+                                <span className="font-black text-sm text-mine-100">{a.title}</span>
+                                <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-red-950 text-red-400 border border-red-800">
+                                  {a.type}
+                                </span>
+                              </div>
+                              <div className="text-xs text-mine-400 mt-1">
+                                Worker Ref: <span className="text-mine-200 font-bold">{a.workerId}</span> | Block: <span className="text-mine-200 font-bold">{a.block}</span> | Timestamp: {a.time}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-2">
+                            {!a.acknowledged && (
+                              <button
+                                onClick={() => {
+                                  setAlerts(alerts.map(item => item.id === a.id ? { ...item, acknowledged: true } : item));
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-mine-800 hover:bg-mine-700 text-mine-200 text-xs font-semibold"
+                              >
+                                Acknowledge
+                              </button>
+                            )}
+                            <button
+                              onClick={() => navigateTo(`#/alert-details/${a.id}`)}
+                              className="px-3.5 py-1.5 rounded-xl bg-hazard hover:bg-hazard-glow text-mine-950 text-xs font-bold uppercase tracking-wider"
+                            >
+                              Dispatch Actions ➔
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* -------------------------------------------------------------
+                  ROUTE 8: ALERT DETAILS DASHBOARD (ACTION DISPATCH CENTER)
+              -------------------------------------------------------------- */}
+              {routeInfo.base === 'alert-details' && currentAlert && (
+                <div className="max-w-3xl mx-auto space-y-6">
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => navigateTo('#/alerts')}
+                      className="text-xs text-mine-400 hover:text-white flex items-center space-x-1"
+                    >
+                      <span>← Back to Alerts</span>
+                    </button>
+                    <span className="text-xs font-mono text-hazard">Incident Ref: {currentAlert.id}</span>
+                  </div>
+
+                  <div className={`p-6 rounded-3xl border ${!currentAlert.acknowledged ? 'bg-red-950/40 border-red-500' : 'bg-mine-900 border-mine-800'}`}>
+                    <div className="flex items-center space-x-3 mb-4">
+                      <span className="text-2xl">🚨</span>
+                      <div>
+                        <h1 className="text-xl font-black text-mine-100 uppercase">{currentAlert.title}</h1>
+                        <p className="text-xs text-mine-400">Target Worker: {currentAlert.workerId} in Block {currentAlert.block} at {currentAlert.time}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 py-4 border-y border-mine-800 text-xs">
+                      <div>
+                        <div className="text-mine-500 uppercase text-[10px]">Severity</div>
+                        <div className="font-bold text-red-400 mt-0.5">{currentAlert.severity}</div>
+                      </div>
+                      <div>
+                        <div className="text-mine-500 uppercase text-[10px]">Haptic Buzzer</div>
+                        <div className={`font-bold mt-0.5 ${currentAlert.hapticSent ? 'text-emerald-400' : 'text-mine-400'}`}>
+                          {currentAlert.hapticSent ? 'ACTIVATED' : 'STANDBY'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-mine-500 uppercase text-[10px]">Rescue Team</div>
+                        <div className={`font-bold mt-0.5 ${currentAlert.teamDispatched ? 'text-emerald-400' : 'text-mine-400'}`}>
+                          {currentAlert.teamDispatched ? 'DISPATCHED' : 'NOT DISPATCHED'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-mine-500 uppercase text-[10px]">Vent Fans</div>
+                        <div className={`font-bold mt-0.5 ${currentAlert.fansMax ? 'text-emerald-400' : 'text-mine-400'}`}>
+                          {currentAlert.fansMax ? '100% MAXIMUM' : 'STANDARD'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action Dispatch Buttons */}
+                    <div className="mt-6 space-y-3">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-mine-300">
+                        Operational Emergency Actions
+                      </h3>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button
+                          onClick={() => {
+                            setAlerts(alerts.map(a => a.id === currentAlert.id ? { ...a, hapticSent: true, acknowledged: true } : a));
+                            alert(`Haptic vibrating alarm sent to Hardhat beacon of ${currentAlert.workerId}!`);
+                          }}
+                          className={`p-3.5 rounded-xl text-xs font-bold text-left flex items-center justify-between border ${
+                            currentAlert.hapticSent
+                              ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300'
+                              : 'bg-mine-950 border-mine-700 hover:border-hazard text-mine-200'
+                          }`}
+                        >
+                          <div>
+                            <div>1. Send Helmet Haptic Alarm</div>
+                            <div className="text-[10px] text-mine-400 font-normal">Vibrate helmet buzzer on worker</div>
+                          </div>
+                          <span>{currentAlert.hapticSent ? '✓ Sent' : '➔'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setAlerts(alerts.map(a => a.id === currentAlert.id ? { ...a, teamDispatched: true, acknowledged: true } : a));
+                            alert(`Underground Rescue Brigade dispatched to Block ${currentAlert.block}!`);
+                          }}
+                          className={`p-3.5 rounded-xl text-xs font-bold text-left flex items-center justify-between border ${
+                            currentAlert.teamDispatched
+                              ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300'
+                              : 'bg-mine-950 border-mine-700 hover:border-hazard text-mine-200'
+                          }`}
+                        >
+                          <div>
+                            <div>2. Dispatch Subterranean Rescue</div>
+                            <div className="text-[10px] text-mine-400 font-normal">Notify nearest team with oxygen gear</div>
+                          </div>
+                          <span>{currentAlert.teamDispatched ? '✓ Dispatched' : '➔'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setAlerts(alerts.map(a => a.id === currentAlert.id ? { ...a, fansMax: true, acknowledged: true } : a));
+                            alert(`Auxiliary and main fan drift speed increased to 100% in Block ${currentAlert.block}!`);
+                          }}
+                          className={`p-3.5 rounded-xl text-xs font-bold text-left flex items-center justify-between border ${
+                            currentAlert.fansMax
+                              ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300'
+                              : 'bg-mine-950 border-mine-700 hover:border-hazard text-mine-200'
+                          }`}
+                        >
+                          <div>
+                            <div>3. Increase Ventilation to 100%</div>
+                            <div className="text-[10px] text-mine-400 font-normal">Purge gases through return airway</div>
+                          </div>
+                          <span>{currentAlert.fansMax ? '✓ Max Vent' : '➔'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setAlerts(alerts.map(a => a.id === currentAlert.id ? { ...a, acknowledged: true } : a));
+                            alert(`Incident ${currentAlert.id} acknowledged in Control Room shift logs.`);
+                          }}
+                          className="p-3.5 rounded-xl text-xs font-bold text-left flex items-center justify-between bg-mine-950 border border-mine-700 hover:border-hazard text-mine-200"
+                        >
+                          <div>
+                            <div>4. Acknowledge Alert</div>
+                            <div className="text-[10px] text-mine-400 font-normal">Silence siren & log operator action</div>
+                          </div>
+                          <span>✓</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* -------------------------------------------------------------
+                  ROUTE 9: EMERGENCY RESPONSE DASHBOARD
+              -------------------------------------------------------------- */}
+              {routeInfo.base === 'emergency-response' && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h1 className="text-xl md:text-2xl font-black uppercase tracking-wider text-red-400 flex items-center space-x-2">
+                        <span>🚨</span>
+                        <span>Emergency Crisis Response Command</span>
+                      </h1>
+                      <p className="text-xs text-mine-400 mt-1">
+                        High-priority statutory emergency dispatches, siren triggers, and national disaster coordination.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => setEvacuationActive(!evacuationActive)}
+                      className={`px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider shadow-xl transition ${
+                        evacuationActive ? 'bg-black text-red-400 border border-red-500' : 'bg-red-600 hover:bg-red-500 text-white'
+                      }`}
+                    >
+                      {evacuationActive ? 'Silence Evacuation Siren' : 'Trigger Mine-Wide Evacuation'}
+                    </button>
+                  </div>
+
+                  {/* Immediate Dispatch Action Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-mine-900 border border-red-500/50 p-6 rounded-3xl space-y-4">
+                      <div className="flex items-center space-x-3">
+                        <span className="text-3xl">🚑</span>
+                        <div>
+                          <h2 className="text-base font-bold text-mine-100">Disaster Medical Units (Ambulances)</h2>
+                          <p className="text-xs text-mine-400">Notify District Hospital & dispatch surface trauma units.</p>
+                        </div>
+                      </div>
+
+                      <div className="p-3 bg-mine-950 border border-mine-800 rounded-xl text-xs text-mine-300">
+                        DGMS Standard: 2 Advance Life Support (ALS) surface ambulances stationed at Pithead.
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setConfirmationModal({
+                            isOpen: true,
+                            title: 'Dispatch Emergency Ambulance Units?',
+                            message: 'This will issue a statutory Priority-1 dispatch order to Central Coalfield Hospital and District Medical Response for 2 ALS Trauma Units.',
+                            onConfirm: () => {
+                              alert('Ambulance Trauma Units dispatched to Shaft 1 & Shaft 2 Pitheads!');
+                              setConfirmationModal({ isOpen: false });
+                            }
+                          });
+                        }}
+                        className="w-full py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-wider transition"
+                      >
+                        Confirm & Call Medical Units
+                      </button>
+                    </div>
+
+                    <div className="bg-mine-900 border border-orange-500/50 p-6 rounded-3xl space-y-4">
+                      <div className="flex items-center space-x-3">
+                        <span className="text-3xl">🚒</span>
+                        <div>
+                          <h2 className="text-base font-bold text-mine-100">NDRF & DGMS Mines Rescue Station</h2>
+                          <p className="text-xs text-mine-400">Mobilize specialized apparatus breathing brigades.</p>
+                        </div>
+                      </div>
+
+                      <div className="p-3 bg-mine-950 border border-mine-800 rounded-xl text-xs text-mine-300">
+                        Protocol: Initiates 4-hour self-contained oxygen breathing apparatus deployment.
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setConfirmationModal({
+                            isOpen: true,
+                            title: 'Mobilize NDRF / DGMS Mine Rescue Station?',
+                            message: 'This will activate statutory emergency protocol Section 83 with NDRF Battalion 9 and Regional Mines Rescue Station.',
+                            onConfirm: () => {
+                              alert('NDRF & DGMS Rescue Brigade notified and mobilized to Mine Incline Entrance!');
+                              setConfirmationModal({ isOpen: false });
+                            }
+                          });
+                        }}
+                        className="w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs uppercase tracking-wider transition"
+                      >
+                        Confirm & Mobilize NDRF Brigade
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Statutory Contact Numbers */}
+                  <div className="bg-mine-900 border border-mine-800 p-5 rounded-2xl">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-mine-300 mb-3">
+                      Statutory Emergency Hotline Directory
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                      <div className="p-3 bg-mine-950 rounded-xl border border-mine-800">
+                        <div className="text-mine-500 text-[10px]">DGMS Regional Inspector</div>
+                        <div className="font-mono font-bold text-hazard mt-1">+91 (0326) 220 2311</div>
+                      </div>
+                      <div className="p-3 bg-mine-950 rounded-xl border border-mine-800">
+                        <div className="text-mine-500 text-[10px]">Mines Rescue Station (Dhanbad)</div>
+                        <div className="font-mono font-bold text-hazard mt-1">+91 (0326) 222 0451</div>
+                      </div>
+                      <div className="p-3 bg-mine-950 rounded-xl border border-mine-800">
+                        <div className="text-mine-500 text-[10px]">District Disaster Control (112)</div>
+                        <div className="font-mono font-bold text-hazard mt-1">112 / +91 94311 00000</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* -------------------------------------------------------------
+                  ROUTE 10: REPORTS & LOGS DASHBOARD
+              -------------------------------------------------------------- */}
+              {routeInfo.base === 'reports' && (
+                <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h1 className="text-xl md:text-2xl font-black uppercase tracking-wider text-mine-100">
+                        Safety Audit Reports & Shift Analytics
+                      </h1>
+                      <p className="text-xs text-mine-400 mt-1">
+                        Download statutory CSV records, view historical gas trends, or generate printable audit summaries.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={handleExportCSV}
+                        className="px-4 py-2.5 rounded-xl bg-hazard hover:bg-hazard-glow text-mine-950 font-bold text-xs uppercase tracking-wider shadow-lg shadow-hazard/20 transition flex items-center space-x-2"
+                      >
+                        <span>📥</span>
+                        <span>Download Shift CSV</span>
+                      </button>
+                      <button
+                        onClick={() => window.print()}
+                        className="px-3.5 py-2.5 rounded-xl bg-mine-800 hover:bg-mine-700 text-mine-200 text-xs font-semibold flex items-center space-x-1.5"
+                      >
+                        <span>🖨️</span>
+                        <span>Print Summary</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Summary Metric Strip */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="bg-mine-900 border border-mine-800 p-4 rounded-2xl">
+                      <div className="text-[10px] text-mine-400 uppercase">Underground Exposure Hours</div>
+                      <div className="text-xl font-bold text-mine-100 mt-1">240 Man-Hours</div>
+                      <div className="text-[10px] text-emerald-400 mt-0.5">Zero fatal incidents in past 30 days</div>
+                    </div>
+                    <div className="bg-mine-900 border border-mine-800 p-4 rounded-2xl">
+                      <div className="text-[10px] text-mine-400 uppercase">Average Methane across Mine</div>
+                      <div className="text-xl font-bold text-mine-100 mt-1">54.2 ppm</div>
+                      <div className="text-[10px] text-yellow-400 mt-0.5">Peak in Block B: 890 ppm</div>
+                    </div>
+                    <div className="bg-mine-900 border border-mine-800 p-4 rounded-2xl">
+                      <div className="text-[10px] text-mine-400 uppercase">Statutory Audit Compliance</div>
+                      <div className="text-xl font-bold text-emerald-400 mt-1">98.4%</div>
+                      <div className="text-[10px] text-mine-400 mt-0.5">DGMS Circular 04 of 2017 compliant</div>
+                    </div>
+                  </div>
+
+                  {/* Printable Shift Summary Audit Sheet */}
+                  <div className="bg-mine-900 border border-mine-800 rounded-3xl p-6 space-y-4">
+                    <div className="flex items-center justify-between pb-4 border-b border-mine-800">
+                      <div>
+                        <h2 className="text-sm font-bold text-mine-100 uppercase tracking-wider">
+                          Official Subterranean Shift Safety Register
+                        </h2>
+                        <p className="text-[11px] text-mine-400">Mine: Jharia Coalfield Seam VII | Shift: Morning | Date: {new Date().toLocaleDateString()}</p>
+                      </div>
+                      <span className="px-3 py-1 bg-emerald-950 border border-emerald-500/50 rounded-full text-emerald-400 text-xs font-bold">
+                        VERIFIED BY CONTROL ROOM
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-mine-800 text-mine-500 text-[10px] uppercase font-bold">
+                            <th className="py-2">Worker ID</th>
+                            <th className="py-2">Name</th>
+                            <th className="py-2">Block</th>
+                            <th className="py-2">Role</th>
+                            <th className="py-2">Safety Score</th>
+                            <th className="py-2">CH4 (ppm)</th>
+                            <th className="py-2">O2 %</th>
+                            <th className="py-2">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-mine-800/60">
+                          {workers.map(w => {
+                            const score = calcSafetyScore(w);
+                            return (
+                              <tr key={w.workerId}>
+                                <td className="py-2 font-mono font-bold">{w.workerId}</td>
+                                <td className="py-2">{w.name}</td>
+                                <td className="py-2">Block {w.block}</td>
+                                <td className="py-2 text-mine-400">{w.designation}</td>
+                                <td className="py-2 font-bold" style={{ color: score.color }}>{score.score}%</td>
+                                <td className="py-2 font-mono">{w.telemetry.mq2_methane_ppm}</td>
+                                <td className="py-2 font-mono">{w.telemetry.oxygen_pct}%</td>
+                                <td className="py-2">
+                                  <span className="text-[10px] px-2 py-0.5 rounded font-bold" style={{ backgroundColor: `${score.color}20`, color: score.color }}>
+                                    {score.tier}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* -------------------------------------------------------------
+                  ROUTE 11: SETTINGS & HARDWARE DASHBOARD
+              -------------------------------------------------------------- */}
+              {routeInfo.base === 'settings' && (
+                <div className="max-w-3xl mx-auto space-y-6">
+                  <div>
+                    <h1 className="text-xl md:text-2xl font-black uppercase tracking-wider text-mine-100">
+                      System Settings & Hardware Integration Hub
+                    </h1>
+                    <p className="text-xs text-mine-400 mt-1">
+                      DGMS statutory compliance disclaimers, ESP32 LoRa helmet node pinouts, and system configurations.
+                    </p>
+                  </div>
+
+                  {/* Statutory Disclaimer */}
+                  <div className="bg-mine-900 border border-hazard/40 p-5 rounded-2xl space-y-2">
+                    <div className="flex items-center space-x-2 text-hazard font-bold text-xs uppercase tracking-wider">
+                      <span>⚠️</span>
+                      <span>DGMS Statutory Compliance & Privacy Guarantee</span>
+                    </div>
+                    <p className="text-xs text-mine-300 leading-relaxed">
+                      MineShield complies with the Directorate General of Mines Safety (DGMS) circulars regarding subterranean wireless atmospheric monitoring and real-time electronic tracking. Under Section 18 of the Mines Act, zero facial photography or biometric images are captured or retained. Personnel are represented exclusively by anonymous safety-coded hardhat icons, initials, and official enterprise miner identifiers.
+                    </p>
+                  </div>
+
+                  {/* ESP32 Hardware Pinout Spec */}
+                  <div className="bg-mine-900 border border-mine-800 p-5 rounded-2xl space-y-3">
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-mine-200">
+                      Smart Helmet ESP32 Hardware Architecture (LoRa 868MHz)
+                    </h2>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs font-mono">
+                      <div className="p-2.5 bg-mine-950 rounded-xl border border-mine-800">
+                        <div className="text-mine-500 text-[10px]">MQ-2 Methane</div>
+                        <div className="text-hazard font-bold mt-0.5">GPIO 34 (ADC1)</div>
+                      </div>
+                      <div className="p-2.5 bg-mine-950 rounded-xl border border-mine-800">
+                        <div className="text-mine-500 text-[10px]">MQ-7 CO</div>
+                        <div className="text-hazard font-bold mt-0.5">GPIO 35 (ADC1)</div>
+                      </div>
+                      <div className="p-2.5 bg-mine-950 rounded-xl border border-mine-800">
+                        <div className="text-mine-500 text-[10px]">MPU-6050 Motion</div>
+                        <div className="text-hazard font-bold mt-0.5">GPIO 21 / 22 (I2C)</div>
+                      </div>
+                      <div className="p-2.5 bg-mine-950 rounded-xl border border-mine-800">
+                        <div className="text-mine-500 text-[10px]">SOS Switch</div>
+                        <div className="text-hazard font-bold mt-0.5">GPIO 14 (Interrupt)</div>
+                      </div>
+                      <div className="p-2.5 bg-mine-950 rounded-xl border border-mine-800">
+                        <div className="text-mine-500 text-[10px]">Haptic Buzzer</div>
+                        <div className="text-hazard font-bold mt-0.5">GPIO 12 (PWM)</div>
+                      </div>
+                      <div className="p-2.5 bg-mine-950 rounded-xl border border-mine-800">
+                        <div className="text-mine-500 text-[10px]">LoRa SX1276</div>
+                        <div className="text-hazard font-bold mt-0.5">SPI (NSS 18, RST 14)</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ESP32 Firmware Snippet */}
+                  <div className="bg-mine-900 border border-mine-800 p-5 rounded-2xl space-y-2">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-mine-300">
+                      Arduino / ESP32 Firmware Telemetry Loop
+                    </h3>
+                    <div className="bg-mine-950 p-4 rounded-xl border border-mine-800 font-mono text-[11px] text-mine-300 overflow-x-auto">
+                      <pre>
+{`// MineShield Subterranean Hardhat Node
+#include <SPI.h>
+#include <LoRa.h>
+#define PIN_MQ2 34
+#define PIN_SOS 14
+
+void setup() {
+  LoRa.begin(868E6); // EU868 / IN865 band
+}
+void loop() {
+  int ch4 = analogRead(PIN_MQ2);
+  bool sos = digitalRead(PIN_SOS) == LOW;
+  // Publish JSON packet over LoRa / MQTT
+  delay(1000);
+}`}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </main>
+          </div>
+
+          {/* CONFIRMATION POPUP MODAL (FOR AMBULANCE / NDRF NOTIFICATIONS) */}
+          {confirmationModal.isOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-page-slide">
+              <div className="bg-mine-900 border border-red-500/60 rounded-3xl max-w-md w-full p-6 space-y-4 text-white shadow-2xl">
+                <div className="flex items-center space-x-2 text-red-400 font-bold text-sm">
+                  <span>🚨</span>
+                  <span>{confirmationModal.title}</span>
+                </div>
+                <p className="text-xs text-mine-300 leading-relaxed">{confirmationModal.message}</p>
+                <div className="flex justify-end space-x-2 pt-2 border-t border-mine-800 text-xs font-bold">
+                  <button onClick={() => setConfirmationModal({ isOpen: false })} className="px-3.5 py-2 rounded-xl bg-mine-950 border border-mine-800 text-mine-400">Cancel</button>
+                  <button onClick={confirmationModal.onConfirm} className="px-4 py-2 rounded-xl bg-red-600 text-white">Confirm Official Dispatch</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.render(<MineShieldApp />, document.getElementById('root'));
+  </script>
+</body>
+</html>
